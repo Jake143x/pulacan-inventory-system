@@ -37,7 +37,10 @@ router.get('/', async (req, res, next) => {
     const category = (req.query.category as string)?.trim() || '';
     const shop = (req.query.shop as string) === 'true';
     const where: {
-      OR?: Array<{ name: { contains: string; mode?: 'insensitive' }; sku?: { contains: string; mode?: 'insensitive' } }>;
+      OR?: Array<
+        | { name: { contains: string; mode?: 'insensitive' }; sku?: { contains: string; mode?: 'insensitive' } }
+        | { sku: { contains: string; mode?: 'insensitive' }; name?: { contains: string; mode?: 'insensitive' } }
+      >;
       category?: string;
       status?: string;
       inventory?: { quantity: { gt: number } };

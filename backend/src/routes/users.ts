@@ -82,7 +82,7 @@ router.get('/', async (req, res, next) => {
     const search = (req.query.search as string)?.trim() || '';
     const category = (req.query.category as string)?.toLowerCase() || 'all';
     const searchWhere = search
-      ? { OR: [{ email: { contains: search, mode: 'insensitive' } }, { fullName: { contains: search, mode: 'insensitive' } }] }
+      ? { OR: [{ email: { contains: search, mode: 'insensitive' as const } }, { fullName: { contains: search, mode: 'insensitive' as const } }] }
       : {};
     const roleWhere =
       category === 'employee'
@@ -127,22 +127,17 @@ router.get('/:id', async (req, res, next) => {
     if (!id) throw new AppError(400, 'Invalid user id');
     const user = await prisma.user.findUnique({
       where: { id },
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-        isActive: true,
-        lastLoginAt: true,
-        createdAt: true,
-        role: { select: { name: true } },
-      },
+      include: { role: { select: { name: true } } },
     });
     if (!user) throw new AppError(404, 'User not found');
     res.json({
-      ...user,
-      role: user.role.name,
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      isActive: user.isActive,
       lastLoginAt: user.lastLoginAt?.toISOString?.() ?? null,
       createdAt: user.createdAt?.toISOString?.() ?? null,
+      role: user.role.name,
     });
   } catch (e) {
     next(e);
