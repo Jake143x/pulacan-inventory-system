@@ -1,0 +1,2 @@
+# Ensure shell scripts use LF so they run on Linux (e.g. Render)
+*.sh text eol=lf
