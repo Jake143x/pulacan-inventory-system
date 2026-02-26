@@ -13,7 +13,8 @@
     "dev": "npx concurrently -n backend,staff,customer -c blue,green,magenta \"npm run dev:backend\" \"npm run dev:staff\" \"npm run dev:customer\"",
     "dev:backend": "cd backend && npm run dev",
     "dev:staff": "cd frontend && npm run dev",
-    "dev:customer": "cd customer && npm run dev"
+    "dev:customer": "cd customer && npm run dev",
+    "start": "cd backend && npx prisma migrate deploy && node dist/index.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
