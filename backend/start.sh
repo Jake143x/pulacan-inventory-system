@@ -17,7 +17,8 @@ if [ -n "$ENGINE" ] && [ -f "$ENGINE" ]; then
   mkdir -p /tmp/prisma-engines
   cp "$ENGINE" /tmp/prisma-engines/
   LIBNAME=$(basename "$ENGINE")
-  export PRISMA_QUERY_ENGINE_LIBRARY=/tmp/prisma-engines/$LIBNAME
+  exec env PRISMA_QUERY_ENGINE_LIBRARY="/tmp/prisma-engines/$LIBNAME" node dist/index.js
 fi
 
+# Fallback: preload tries to set engine from node_modules (no shell export)
 exec node -r ./set-prisma-engine.cjs dist/index.js

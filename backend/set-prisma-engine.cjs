@@ -15,7 +15,7 @@ try {
       (f) => f.startsWith('libquery_engine') && f.endsWith('.so.node')
     ) || files.find((f) => f.endsWith('.so.node'));
     if (engine) {
-      process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(clientDir, engine);
+      process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.resolve(clientDir, engine);
     }
   }
 } catch (_) {}
