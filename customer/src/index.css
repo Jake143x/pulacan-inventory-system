@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Customer app: shopping / storefront theme — warm, inviting, retail */
+:root {
+  --customer-bg: #FDF8F3;
+  --customer-card: #FFFFFF;
+  --customer-border: #E8DED5;
+  --customer-text: #1C1917;
+  --customer-text-muted: #78716C;
+  --customer-primary: #EA580C;
+  --customer-primary-hover: #C2410C;
+  --customer-primary-light: #FFF7ED;
+  --customer-accent: #0D9488;
+  --customer-accent-hover: #0F766E;
+  --customer-success: #059669;
+  --customer-radius: 12px;
+  --customer-radius-lg: 16px;
+  --customer-shadow: 0 2px 4px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --customer-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --customer-shadow-hover: 0 12px 32px rgba(0, 0, 0, 0.12), 0 6px 16px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+html {
+  font-family: 'Poppins', system-ui, sans-serif;
+}
+
+/* Shopping theme: warm cream base with subtle grid */
+body {
+  font-family: 'Poppins', system-ui, sans-serif;
+  @apply antialiased;
+  background-color: var(--customer-bg);
+  background-image:
+    linear-gradient(180deg, rgba(253, 248, 243, 0.98) 0%, rgba(255, 251, 247, 0.99) 50%, rgba(245, 240, 235, 0.98) 100%),
+    linear-gradient(rgba(234, 88, 12, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(234, 88, 12, 0.04) 1px, transparent 1px);
+  background-size: 100% 100%, 28px 28px, 28px 28px;
+  background-attachment: fixed;
+  color: var(--customer-text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Glassmorphism panel for dashboard / content (semi-transparent white, blurred) */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--customer-radius-lg);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+/* Large white content card (cart, product detail) */
+.content-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--customer-radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--customer-border);
+}
+
+*:focus {
+  --tw-ring-color: rgb(234 88 12 / 0.4);
+}
+*:focus-visible {
+  outline-color: var(--customer-primary);
+}
+
+@layer components {
+  .btn-store {
+    @apply inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white rounded-xl transition-colors;
+    background-color: var(--customer-primary);
+  }
+  .btn-store:hover {
+    background-color: var(--customer-primary-hover);
+  }
+  .card-store {
+    background-color: var(--customer-card);
+    border: 1px solid var(--customer-border);
+    border-radius: var(--customer-radius-lg);
+    box-shadow: var(--customer-shadow);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .card-store:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--customer-shadow-hover);
+  }
+  .card-3d {
+    box-shadow: var(--customer-shadow);
+    border: 1px solid var(--customer-border);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .card-3d:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--customer-shadow-hover);
+  }
+  .btn-3d {
+    box-shadow: 0 3px 0 rgba(194, 65, 12, 0.3), 0 4px 12px rgba(234, 88, 12, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .btn-3d:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 0 rgba(194, 65, 12, 0.3), 0 6px 16px rgba(234, 88, 12, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+  .btn-3d:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 rgba(194, 65, 12, 0.3), 0 2px 6px rgba(234, 88, 12, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  .input-store {
+    @apply block w-full px-4 py-2.5 rounded-xl transition-colors;
+    background-color: var(--customer-card);
+    border: 1px solid var(--customer-border);
+    color: var(--customer-text);
+  }
+  .input-store::placeholder {
+    color: var(--customer-text-muted);
+  }
+  .input-store:focus {
+    outline: none;
+    border-color: var(--customer-primary);
+    box-shadow: 0 0 0 3px rgb(234 88 12 / 0.15);
+  }
+}
+
+@keyframes cart-badge {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.cart-badge-animate {
+  animation: cart-badge 0.3s ease-out;
+}
+
+@keyframes ai-recommend-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ai-recommend-fade-in {
+  animation: ai-recommend-fade-in 0.4s ease-out forwards;
+}
+
+.customer-theme-bg {
+  /* Let body construction theme show through */
+  background: transparent;
+}

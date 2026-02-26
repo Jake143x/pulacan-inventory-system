@@ -1,0 +1,54 @@
+# Render Blueprint – Pulacan Inventory System
+# https://docs.render.com/blueprint-spec
+# After first deploy: set VITE_API_URL on both static sites to your API URL (e.g. https://pulacan-api.onrender.com/api)
+# and set API_BASE_URL on the API service to that same URL (e.g. https://pulacan-api.onrender.com).
+
+databases:
+  - name: pulacan-db
+    databaseName: pulacan
+    user: pulacan
+    plan: free
+
+services:
+  # Backend API (Node + Express + Prisma)
+  - type: web
+    runtime: node
+    name: pulacan-api
+    rootDir: backend
+    region: oregon
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pulacan-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: API_BASE_URL
+        sync: false
+
+  # Admin dashboard (React static site)
+  - type: web
+    runtime: static
+    name: pulacan-admin
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+
+  # Customer shop (React static site)
+  - type: web
+    runtime: static
+    name: pulacan-customer
+    rootDir: customer
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false

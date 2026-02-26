@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Professional admin/staff theme — dark slate, blue accent, 3D depth */
+:root {
+  --admin-bg: #1E293B;
+  --admin-sidebar: #0F172A;
+  --admin-card: #334155;
+  --admin-border: rgba(255, 255, 255, 0.06);
+  --admin-text: #F8FAFC;
+  --admin-muted: #94A3B8;
+  --admin-dim: #64748B;
+  --admin-primary: #2563EB;
+  --admin-primary-hover: #1D4ED8;
+  --admin-success: #16A34A;
+  --admin-radius: 12px;
+  --admin-radius-lg: 16px;
+  /* 3D layered shadows — depth and lift */
+  --admin-shadow: 0 2px 4px rgb(0 0 0 / 0.2), 0 4px 8px rgb(0 0 0 / 0.15);
+  --admin-shadow-lg: 0 8px 16px rgb(0 0 0 / 0.25), 0 4px 8px rgb(0 0 0 / 0.2), 0 2px 4px rgb(0 0 0 / 0.15);
+  --admin-shadow-xl: 0 12px 24px rgb(0 0 0 / 0.3), 0 6px 12px rgb(0 0 0 / 0.2);
+  --admin-shadow-inset: inset 0 1px 0 rgba(255 255 255 / 0.06);
+  --admin-highlight: rgba(255, 255, 255, 0.04);
+}
+
+html {
+  font-family: 'Poppins', system-ui, sans-serif;
+}
+
+/* Same gradient used for body and any full-page admin views (login, layout, redirects) */
+.admin-canvas {
+  background: linear-gradient(160deg, #0F172A 0%, #1E293B 40%, #334155 100%);
+  background-attachment: fixed;
+}
+
+body {
+  font-family: 'Poppins', system-ui, sans-serif;
+  background: linear-gradient(160deg, #0F172A 0%, #1E293B 40%, #334155 100%);
+  background-attachment: fixed;
+  color: var(--admin-text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: 0.01em;
+}
+
+*:focus {
+  --tw-ring-color: rgb(37 99 235 / 0.4);
+}
+*:focus-visible {
+  outline-color: var(--admin-primary);
+}
+
+/* 3D card and button effects */
+.card-3d {
+  box-shadow: var(--admin-shadow), var(--admin-shadow-inset);
+  border: 1px solid var(--admin-border);
+  border-top-color: var(--admin-highlight);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-3d:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--admin-shadow-lg), var(--admin-shadow-inset);
+}
+.btn-3d {
+  box-shadow: 0 4px 0 rgb(0 0 0 / 0.2), 0 6px 12px rgb(0 0 0 / 0.15), inset 0 1px 0 rgba(255 255 255 / 0.1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-3d:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 0 rgb(0 0 0 / 0.2), 0 8px 16px rgb(0 0 0 / 0.2), inset 0 1px 0 rgba(255 255 255 / 0.12);
+}
+.btn-3d:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgb(0 0 0 / 0.2), 0 2px 6px rgb(0 0 0 / 0.15), inset 0 1px 0 rgba(255 255 255 / 0.05);
+}
+.sidebar-3d {
+  box-shadow: 4px 0 24px rgb(0 0 0 / 0.25), 2px 0 8px rgb(0 0 0 / 0.2);
+}
+
+@keyframes fade-in-row {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fade-in-row 0.4s ease-out forwards;
+}

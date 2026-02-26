@@ -1,0 +1,21 @@
+{
+  "name": "inventory-management-system",
+  "private": true,
+  "description": "Web-Based Inventory Management System - Internal Administrative Panel & Customer Web Portal",
+  "prisma": {
+    "schema": "backend/prisma/schema.prisma"
+  },
+  "scripts": {
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install && cd ../customer && npm install",
+    "setup": "cd backend && npx prisma generate && npx prisma db push && npm run seed",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "dev": "npx concurrently -n backend,staff,customer -c blue,green,magenta \"npm run dev:backend\" \"npm run dev:staff\" \"npm run dev:customer\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:staff": "cd frontend && npm run dev",
+    "dev:customer": "cd customer && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
