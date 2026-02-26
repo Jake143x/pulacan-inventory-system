@@ -8,5 +8,16 @@ node node_modules/prisma/build/index.js migrate deploy
 # Generate Prisma client (ensures Linux engine is present)
 node node_modules/prisma/build/index.js generate
 
-# Start app with preload so Prisma engine path is set from Node (avoids wrong paths from Prisma's search)
+# Copy engine to fixed path and set env so Prisma finds it (avoids path search / wrong paths)
+ENGINE=$(find "$(pwd)/node_modules/.prisma/client" -maxdepth 1 -type f -name 'libquery_engine*.so.node' 2>/dev/null | head -1)
+if [ -z "$ENGINE" ]; then
+  ENGINE=$(find "$(pwd)/node_modules/.prisma/client" -maxdepth 1 -type f -name '*.so.node' 2>/dev/null | head -1)
+fi
+if [ -n "$ENGINE" ] && [ -f "$ENGINE" ]; then
+  mkdir -p /tmp/prisma-engines
+  cp "$ENGINE" /tmp/prisma-engines/
+  LIBNAME=$(basename "$ENGINE")
+  export PRISMA_QUERY_ENGINE_LIBRARY=/tmp/prisma-engines/$LIBNAME
+fi
+
 exec node -r ./set-prisma-engine.cjs dist/index.js
