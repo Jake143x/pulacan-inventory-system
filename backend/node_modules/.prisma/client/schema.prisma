@@ -2,7 +2,8 @@
 // Use PostgreSQL for Supabase (or any Postgres). For local SQLite, switch provider to "sqlite" and use file:./dev.db
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
