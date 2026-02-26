@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "postinstall": "prisma generate",
+    "postinstall": "npx prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "seed": "npm run db:push && npm run db:seed",
@@ -22,6 +22,7 @@
     "express-validator": "^7.2.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
+    "prisma": "^5.22.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -31,7 +32,6 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/multer": "^2.0.0",
     "@types/node": "^22.9.0",
-    "prisma": "^5.22.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }
