@@ -17,7 +17,7 @@ services:
     rootDir: backend
     region: oregon
     buildCommand: npm install && rm -rf node_modules/.prisma && node node_modules/prisma/build/index.js generate && npm run build
-    startCommand: node node_modules/prisma/build/index.js migrate deploy && node node_modules/prisma/build/index.js generate && node dist/index.js
+    startCommand: sh start.sh
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
