@@ -16,7 +16,7 @@ services:
     name: pulacan-api
     rootDir: backend
     region: oregon
-    buildCommand: npm install && rm -rf node_modules/.prisma && node node_modules/prisma/build/index.js generate && npm run build
+    buildCommand: npm install && rm -rf node_modules/.prisma && node node_modules/prisma/build/index.js generate && mkdir -p prisma-engines && cp node_modules/.prisma/client/libquery_engine*.so.node prisma-engines/ 2>/dev/null || true && npm run build
     startCommand: sh start.sh
     healthCheckPath: /api/health
     envVars:
