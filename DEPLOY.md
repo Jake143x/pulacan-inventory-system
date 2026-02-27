@@ -85,6 +85,30 @@ Use the same `DATABASE_URL` if you need to run migrations from your machine late
 
 ---
 
+### Product images not loading on the store?
+
+If the customer store shows placeholders instead of product images:
+
+1. **Set the image base URL on the backend**  
+   In Render → your **backend** service (e.g. `pulacan-inventory-system`) → **Environment** → add:
+   - **Key:** `API_BASE_URL`  
+   - **Value:** `https://pulacan-inventory-system.onrender.com`  
+   (Use your backend’s real URL, no trailing slash.)
+
+2. **Deploy the latest backend**  
+   Push your code (including `backend/src/lib/imageUrl.ts` and the products/orders changes that use it), then trigger **Manual Deploy** for the backend so the new image-URL logic is live.
+
+3. **Confirm the backend is using it**  
+   Open:  
+   `https://pulacan-inventory-system.onrender.com/api/health`  
+   The response should include `"imageBaseUrl": "https://pulacan-inventory-system.onrender.com"`.  
+   If `imageBaseUrl` is `null`, `API_BASE_URL` (or Render’s `RENDER_EXTERNAL_URL`) is not set.
+
+4. **Re-upload images if needed**  
+   On Render’s free tier, the server disk is ephemeral: files in `uploads/` are lost on each deploy. If the API returns correct image URLs but images still don’t load, re-upload product images in the admin after each deploy, or move uploads to persistent storage (e.g. S3) for production.
+
+---
+
 ## Option B: Manual setup (without Blueprint)
 
 ### 1. Create the database

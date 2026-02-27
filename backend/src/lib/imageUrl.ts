@@ -8,10 +8,15 @@ const BASE =
   process.env.RENDER_EXTERNAL_URL ||
   '';
 
+/** Public base URL (no trailing slash) used for image URLs. Empty if not set. */
+export function getImageBaseUrl(): string {
+  return BASE.replace(/\/$/, '');
+}
+
 export function resolveImageUrl(url: string | null | undefined): string | null | undefined {
   if (!url) return url;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  const base = BASE.replace(/\/$/, '');
+  const base = getImageBaseUrl();
   if (url.startsWith('/') && base) return `${base}${url}`;
   return url;
 }

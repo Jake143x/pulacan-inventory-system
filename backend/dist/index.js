@@ -17,6 +17,7 @@ import { uploadRouter } from './routes/upload.js';
 import { rateLimiter } from './middleware/rateLimit.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { startScheduledAI } from './services/scheduler.js';
+import { getImageBaseUrl } from './lib/imageUrl.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 app.use(cors({ origin: true, credentials: true }));
@@ -35,7 +36,11 @@ app.use('/api/analytics', analyticsRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/config', configRouter);
 app.use('/api/notifications', notificationsRouter);
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.get('/api/health', (_req, res) => res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    imageBaseUrl: getImageBaseUrl() || null,
+}));
 app.get('/', (_req, res) => {
     res.json({
         name: 'Pulacan Inventory API',
