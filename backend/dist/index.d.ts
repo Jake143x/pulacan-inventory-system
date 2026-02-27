@@ -1,1 +1,1 @@
-export {};
+import './setupPrismaEngine.js';
