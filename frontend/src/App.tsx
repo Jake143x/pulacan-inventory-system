@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import DashboardLayout from './layouts/DashboardLayout';
@@ -23,8 +23,7 @@ const CUSTOMER_WEB_PORTAL_URL = 'http://localhost:5174';
 const INTERNAL_ALLOWED_ROLES = ['ADMIN', 'OWNER', 'CASHIER'];
 
 function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles?: string[] }) {
-  const { user, loading, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user, loading } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'CUSTOMER') {

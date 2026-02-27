@@ -37,7 +37,7 @@ export default function AnalyticsPage() {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [chartData, setChartData] = useState<Array<{ date: string; revenue: number; historical?: number; forecast?: number }>>([]);
-  const [historicalCount, setHistoricalCount] = useState(0);
+  const [, setHistoricalCount] = useState(0);
   const [depletion, setDepletion] = useState<Array<{
     productName: string;
     currentQuantity: number;
@@ -181,7 +181,7 @@ export default function AnalyticsPage() {
                 <YAxis tick={{ fill: 'var(--admin-text)', fontSize: 11 }} tickFormatter={(v) => `${CURRENCY}${v}`} />
                 <Tooltip
                   contentStyle={{ backgroundColor: 'var(--admin-card)', border: '1px solid var(--admin-border)', borderRadius: 8 }}
-                  formatter={(value: number, name: string) => [value != null ? `${CURRENCY}${Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '—', name === 'historical' ? 'Historical' : 'Forecast']}
+                  formatter={(value: number | undefined, name: string | undefined) => [value != null ? `${CURRENCY}${Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '—', name === 'historical' ? 'Historical' : 'Forecast']}
                 />
                 <Legend formatter={(value) => (value === 'historical' ? 'Historical Sales' : 'Forecasted Sales')} />
                 <Line type="monotone" dataKey="historical" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} name="historical" connectNulls />

@@ -305,7 +305,7 @@ export default function ReportsPage() {
                       <Tooltip
                         contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #475569', borderRadius: 8 }}
                         labelStyle={{ color: '#e2e8f0' }}
-                        formatter={(value: number) => (value != null ? [value, 'Units'] : [])}
+                        formatter={(value: number | undefined) => (value != null ? [value, 'Units'] : [])}
                         labelFormatter={(label) => label}
                       />
                       <Line
@@ -368,7 +368,7 @@ export default function ReportsPage() {
                       </Pie>
                       <Tooltip
                         contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #475569', borderRadius: 8 }}
-                        formatter={(value: number) => [CURRENCY + value.toLocaleString('en-PH', { minimumFractionDigits: 2 }), 'Revenue']}
+                        formatter={(value: number | undefined) => [CURRENCY + (value ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 }), 'Revenue']}
                       />
                     </PieChart>
                   </ResponsiveContainer>
@@ -392,7 +392,7 @@ export default function ReportsPage() {
                     <YAxis tick={{ fill: chartTheme.text, fontSize: 12 }} tickFormatter={(v) => `${CURRENCY}${v}`} />
                     <Tooltip
                       contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #475569', borderRadius: 8 }}
-                      formatter={(value: number) => [CURRENCY + value.toLocaleString('en-PH', { minimumFractionDigits: 2 }), 'Revenue']}
+                      formatter={(value: number | undefined) => [CURRENCY + (value ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 }), 'Revenue']}
                       labelFormatter={(label) => label}
                     />
                     <Line type="monotone" dataKey="revenue" stroke={chartTheme.actualStroke} strokeWidth={2.5} dot={{ fill: chartTheme.actualStroke, r: 4 }} name="Revenue" />
@@ -419,7 +419,7 @@ export default function ReportsPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} strokeOpacity={0.8} />
                     <XAxis type="number" tick={{ fill: chartTheme.text, fontSize: 12 }} />
                     <YAxis type="category" dataKey="name" tick={{ fill: chartTheme.text, fontSize: 12 }} width={72} />
-                    <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #475569', borderRadius: 8 }} formatter={(value: number) => [value, 'Units sold']} />
+                    <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #475569', borderRadius: 8 }} formatter={(value: number | undefined) => [value ?? 0, 'Units sold']} />
                     <Bar dataKey="quantity" fill={chartTheme.barFill} name="Units sold" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>

@@ -43,7 +43,7 @@ export default function SalesChartFullPage() {
 
   return (
     <div className="min-h-screen flex flex-col admin-canvas" style={{ backgroundColor: 'var(--admin-bg)' }}>
-      <header className="flex items-center justify-between gap-4 px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--admin-border)', ...cardBg }}>
+      <header className="flex items-center justify-between gap-4 px-6 py-4 border-b shrink-0" style={cardBg}>
         <div className="flex items-center gap-4">
           <Link
             to="/dashboard"
@@ -78,7 +78,7 @@ export default function SalesChartFullPage() {
                 <Tooltip
                   contentStyle={{ backgroundColor: 'var(--admin-card)', border: '1px solid var(--admin-border)', borderRadius: 8 }}
                   labelStyle={{ color: 'var(--admin-text)' }}
-                  formatter={(value: number) => [`${CURRENCY}${value.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`, 'Revenue']}
+                  formatter={(value: number | undefined) => [`${CURRENCY}${(value ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`, 'Revenue']}
                 />
                 <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={2} dot={{ fill: '#3B82F6', r: 4 }} activeDot={{ r: 6 }} />
               </LineChart>

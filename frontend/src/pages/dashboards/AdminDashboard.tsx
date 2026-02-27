@@ -15,11 +15,6 @@ function getDefaultDateRange() {
   start.setDate(start.getDate() - 6);
   return { startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) };
 }
-function rangeIncludesToday(startDate: string, endDate: string) {
-  const today = getTodayDateString();
-  return startDate <= today && endDate >= today;
-}
-/** Previous period of same length (for comparison). */
 function getPreviousPeriod(startDate: string, endDate: string): { startDate: string; endDate: string } {
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -80,7 +75,7 @@ export default function AdminDashboard() {
         setLiveTransactions(newList);
         const newIds = new Set(newList.map((t) => t.id));
         const prev = prevLiveIdsRef.current;
-        const added = prev.size > 0 ? new Set([...newIds].filter((id) => !prev.has(id))) : new Set();
+        const added = prev.size > 0 ? new Set<number>([...newIds].filter((id) => !prev.has(id))) : new Set<number>();
         prevLiveIdsRef.current = newIds;
         setNewTransactionIds(added);
         if (trendsRes?.data) setRevenueTrends(trendsRes.data);
@@ -209,7 +204,7 @@ export default function AdminDashboard() {
                 <Tooltip
                   contentStyle={{ backgroundColor: 'var(--admin-card)', border: '1px solid var(--admin-border)', borderRadius: 8 }}
                   labelStyle={{ color: 'var(--admin-text)' }}
-                  formatter={(value: number) => [`${CURRENCY}${value.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`, 'Revenue']}
+                  formatter={(value: number | undefined) => [value != null ? `${CURRENCY}${value.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '—', 'Revenue']}
                 />
                 <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={2} dot={{ fill: '#3B82F6', r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>
@@ -244,7 +239,7 @@ export default function AdminDashboard() {
                 <YAxis type="category" dataKey="name" width={140} tick={{ fill: 'var(--admin-text)', fontSize: 11 }} />
                 <Tooltip
                   contentStyle={{ backgroundColor: 'var(--admin-card)', border: '1px solid var(--admin-border)', borderRadius: 8 }}
-                  formatter={(value: number) => [value, 'Units sold']}
+                  formatter={(value: number | undefined) => [value ?? 0, 'Units sold']}
                   labelFormatter={(_, payload) => (payload?.[0]?.payload?.fullName ?? '')}
                 />
                 <Bar dataKey="quantity" fill="#3B82F6" radius={[0, 4, 4, 0]} maxBarSize={28} />
@@ -324,7 +319,7 @@ export default function AdminDashboard() {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number, name: string) => [value, name]}
+                    formatter={(value: number | undefined, name: string | undefined) => [value ?? 0, name ?? '']}
                     contentStyle={{ backgroundColor: 'var(--admin-card)', border: '1px solid var(--admin-border)', borderRadius: 8 }}
                   />
                 </PieChart>
