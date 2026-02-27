@@ -41,6 +41,14 @@ app.use('/api/notifications', notificationsRouter);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
+app.get('/', (_req, res) => {
+  res.json({
+    name: 'Pulacan Inventory API',
+    status: 'running',
+    docs: 'Use /api/* endpoints. Health check: /api/health',
+  });
+});
+
 app.use(errorHandler);
 
 app.listen(PORT, () => {
