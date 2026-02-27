@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { notifications, orders, products } from '../api/client';
 import type { Notification as NotificationType, Product } from '../api/client';
+import { resolveImageUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import ProductImagePlaceholder from '../components/ProductImagePlaceholder';
@@ -181,7 +182,7 @@ export default function Dashboard() {
                         className="aspect-square flex items-center justify-center p-3 bg-white"
                       >
                         {p.imageUrl ? (
-                          <img src={p.imageUrl} alt={p.name} className="w-full h-full object-contain" />
+                          <img src={resolveImageUrl(p.imageUrl) ?? ''} alt={p.name} className="w-full h-full object-contain" />
                         ) : (
                           <ProductImagePlaceholder className="w-full h-full max-w-[100px] max-h-[100px]" />
                         )}

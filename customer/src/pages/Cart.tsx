@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { products, orders, publicConfig } from '../api/client';
 import type { Product } from '../api/client';
+import { resolveImageUrl } from '../api/client';
 import { useCart } from '../context/CartContext';
 import ProductImagePlaceholder from '../components/ProductImagePlaceholder';
 
@@ -255,7 +256,7 @@ export default function Cart() {
                       <div className="p-5 flex flex-col sm:flex-row sm:items-center gap-4">
                         <Link to={`/product/${i.product.id}`} className="shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center">
                           {i.product.imageUrl ? (
-                            <img src={i.product.imageUrl} alt="" className="w-full h-full object-contain" />
+                            <img src={resolveImageUrl(i.product.imageUrl) ?? ''} alt="" className="w-full h-full object-contain" />
                           ) : (
                             <ProductImagePlaceholder className="w-10 h-10" />
                           )}
@@ -333,7 +334,7 @@ export default function Cart() {
                         >
                           <div className="w-full aspect-square bg-slate-100 flex items-center justify-center p-2">
                             {product?.imageUrl ? (
-                              <img src={product.imageUrl} alt="" className="w-full h-full object-contain" />
+                              <img src={resolveImageUrl(product.imageUrl) ?? ''} alt="" className="w-full h-full object-contain" />
                             ) : (
                               <ProductImagePlaceholder className="w-8 h-8 text-slate-400" />
                             )}

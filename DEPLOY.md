@@ -44,7 +44,8 @@ Render will prompt for any `sync: false` variables.
 - **API_BASE_URL**  
   Set this **after** the first deploy, to your API’s public URL, e.g.  
   `https://pulacan-api.onrender.com`  
-  (no trailing slash). Used for product image URLs in emails/API responses.
+  (no trailing slash). Used for product image URLs in API responses.  
+  On Render, **RENDER_EXTERNAL_URL** is set automatically; the backend uses it as a fallback, so image URLs often work without setting API_BASE_URL.
 
 **For `pulacan-admin` (Admin dashboard):**
 

@@ -5,6 +5,7 @@ import { requireRoles } from '../middleware/rbac.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { createNotification } from '../services/notifications.js';
 import { prisma } from '../lib/prisma.js';
+import { resolveOrderProductImages } from '../lib/imageUrl.js';
 const router = Router();
 const PAYMENT_METHODS = ['GCASH', 'DEBIT_CARD', 'CASH_ON_DELIVERY'];
 // Customer: place order (pending approval), view own orders. Shipping address required at checkout.
@@ -71,7 +72,7 @@ router.post('/', authenticate, body('items').isArray(), body('items.*.productId'
             }
             await createNotification(prisma, userId, 'Order Approved', `Your order #${order.id} has been approved.`, 'ORDER_APPROVED');
         }
-        res.status(201).json(order);
+        res.status(201).json(resolveOrderProductImages(order));
     }
     catch (e) {
         next(e);
@@ -99,7 +100,7 @@ router.get('/', authenticate, async (req, res, next) => {
                 prisma.onlineOrder.count({ where }),
             ]);
             return res.json({
-                data: orders,
+                data: orders.map(resolveOrderProductImages),
                 pagination: { page, limit, total, pages: Math.ceil(total / limit) },
             });
         }
@@ -116,7 +117,7 @@ router.get('/', authenticate, async (req, res, next) => {
                 prisma.onlineOrder.count({ where }),
             ]);
             return res.json({
-                data: orders,
+                data: orders.map(resolveOrderProductImages),
                 pagination: { page, limit, total, pages: Math.ceil(total / limit) },
             });
         }
@@ -133,7 +134,7 @@ router.get('/pending', authenticate, requireRoles('CASHIER', 'OWNER'), async (_r
             include: { user: { select: { id: true, email: true, fullName: true } }, items: { include: { product: true } } },
             orderBy: { createdAt: 'asc' },
         });
-        res.json({ data: orders });
+        res.json({ data: orders.map(resolveOrderProductImages) });
     }
     catch (e) {
         next(e);
@@ -151,7 +152,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
         if (req.user.roleName === 'CUSTOMER' && order.userId !== req.user.id) {
             throw new AppError(403, 'Access denied');
         }
-        res.json(order);
+        res.json(resolveOrderProductImages(order));
     }
     catch (e) {
         next(e);
@@ -218,7 +219,7 @@ router.patch('/:id/approve', authenticate, requireRoles('CASHIER', 'OWNER'), bod
             where: { id },
             include: { items: { include: { product: true } } },
         });
-        res.json(updated);
+        res.json(resolveOrderProductImages(updated));
     }
     catch (e) {
         next(e);

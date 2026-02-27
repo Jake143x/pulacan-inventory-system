@@ -4,6 +4,7 @@ import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { requireRoles } from '../middleware/rbac.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { prisma } from '../lib/prisma.js';
+import { resolveProductImage } from '../lib/imageUrl.js';
 
 const router = Router();
 
@@ -62,7 +63,7 @@ router.get('/', async (req, res, next) => {
       prisma.product.count({ where }),
     ]);
     res.json({
-      data: products,
+      data: products.map(resolveProductImage),
       pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     });
   } catch (e) {
@@ -79,7 +80,7 @@ router.get('/:id', async (req, res, next) => {
       include: { inventory: true },
     });
     if (!product) throw new AppError(404, 'Product not found');
-    res.json(product);
+    res.json(resolveProductImage(product));
   } catch (e) {
     next(e);
   }
@@ -140,7 +141,7 @@ router.post(
         where: { id: product.id },
         include: { inventory: true },
       });
-      res.status(201).json(withInv);
+      res.status(201).json(resolveProductImage(withInv!));
     } catch (e) {
       next(e);
     }
@@ -218,7 +219,7 @@ router.patch(
         data: update,
         include: { inventory: true },
       });
-      res.json(product);
+      res.json(resolveProductImage(product));
     } catch (e) {
       next(e);
     }

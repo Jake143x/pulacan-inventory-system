@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { products } from '../api/client';
 import type { Product } from '../api/client';
+import { resolveImageUrl } from '../api/client';
 import { useCart } from '../context/CartContext';
 import ProductImagePlaceholder from '../components/ProductImagePlaceholder';
 
@@ -83,7 +84,7 @@ export default function ProductDetail() {
         <div className="md:col-span-3">
           <div className="aspect-square max-h-[480px] md:max-h-none rounded-2xl border border-slate-200 bg-white flex items-center justify-center p-8 overflow-hidden shadow-sm">
             {imageUrl ? (
-              <img src={imageUrl} alt={product.name} className="w-full h-full object-contain" />
+              <img src={resolveImageUrl(imageUrl) ?? ''} alt={product.name} className="w-full h-full object-contain" />
             ) : (
               <ProductImagePlaceholder className="w-full h-full max-w-[280px] max-h-[280px]" />
             )}

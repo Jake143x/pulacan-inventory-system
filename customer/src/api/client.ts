@@ -1,5 +1,16 @@
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
+/** Base URL of the API server (no /api suffix). Used to resolve relative image paths. */
+export const API_BASE_URL = API_URL ? API_URL.replace(/\/api\/?$/, '') : '';
+
+/** Resolve product/upload image URL so it loads from the backend when the app is on a different origin (e.g. static site). */
+export function resolveImageUrl(url: string | null | undefined): string | null | undefined {
+  if (!url) return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('/') && API_BASE_URL) return `${API_BASE_URL}${url}`;
+  return url;
+}
+
 function getToken(): string | null {
   return localStorage.getItem('token');
 }

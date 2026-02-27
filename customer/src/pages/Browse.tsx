@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { products } from '../api/client';
 import type { Product } from '../api/client';
+import { resolveImageUrl } from '../api/client';
 import ProductImagePlaceholder from '../components/ProductImagePlaceholder';
 import { useCart } from '../context/CartContext';
 
@@ -130,7 +131,7 @@ export default function Browse() {
                   <Link to={`/product/${p.id}`} className="block aspect-square overflow-hidden bg-[var(--customer-bg)]">
                     <div className="w-full h-full flex items-center justify-center p-5 transition-transform duration-300 group-hover:scale-105">
                       {p.imageUrl ? (
-                        <img src={p.imageUrl} alt={p.name} className="w-full h-full object-contain" />
+                        <img src={resolveImageUrl(p.imageUrl) ?? ''} alt={p.name} className="w-full h-full object-contain" />
                       ) : (
                         <ProductImagePlaceholder className="w-full h-full max-w-[140px] max-h-[140px]" />
                       )}
