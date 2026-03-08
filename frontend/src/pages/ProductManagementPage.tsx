@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { products, uploadProductImage } from '../api/client';
-import type { Product } from '../api/client';
+import type { Product, ProductUnit } from '../api/client';
 
 const CURRENCY = '₱';
 const CARD_BG = { backgroundColor: 'var(--admin-card)', borderColor: 'var(--admin-border)' };
@@ -52,11 +52,20 @@ export default function ProductManagementPage() {
     lowStockThreshold: '10',
     reorderLevel: '10',
     reorderQuantity: '100',
+    unitType: 'piece' as 'piece' | 'kg' | 'meter',
+    saleUnit: '',
+    allowCustomQuantity: false,
+    minOrderQuantity: '',
+    quantityStep: '',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageError, setImageError] = useState('');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
+  const [unitForm, setUnitForm] = useState({ unitName: '', price: '', stock: '0' });
+  const [addingUnit, setAddingUnit] = useState(false);
+  const [editingUnitId, setEditingUnitId] = useState<number | null>(null);
+  const [editUnitForm, setEditUnitForm] = useState({ unitName: '', price: '', stock: '' });
 
   const load = () => {
     setLoading(true);
@@ -89,6 +98,11 @@ export default function ProductManagementPage() {
       lowStockThreshold: '10',
       reorderLevel: '10',
       reorderQuantity: '100',
+      unitType: 'piece',
+      saleUnit: '',
+      allowCustomQuantity: false,
+      minOrderQuantity: '',
+      quantityStep: '',
     });
     setImageFile(null);
     setImageError('');
@@ -99,6 +113,8 @@ export default function ProductManagementPage() {
   const openEdit = (p: Product) => {
     setEditing(p);
     setErr('');
+    setUnitForm({ unitName: '', price: '', stock: '0' });
+    setEditingUnitId(null);
     setForm({
       name: p.name,
       sku: p.sku ?? '',
@@ -109,9 +125,14 @@ export default function ProductManagementPage() {
       imageUrl: p.imageUrl ?? '',
       status: (p.status === 'inactive' ? 'inactive' : 'active') as 'active' | 'inactive',
       initialQuantity: '0',
-      lowStockThreshold: String(p.inventory?.lowStockThreshold ?? 10),
-      reorderLevel: String(p.inventory?.reorderLevel ?? 10),
-      reorderQuantity: String(p.inventory?.reorderQuantity ?? 100),
+      lowStockThreshold: '10',
+      reorderLevel: '10',
+      reorderQuantity: '100',
+      unitType: (p.unitType === 'kg' || p.unitType === 'meter' ? p.unitType : 'piece') as 'piece' | 'kg' | 'meter',
+      saleUnit: p.saleUnit ?? '',
+      allowCustomQuantity: p.allowCustomQuantity ?? false,
+      minOrderQuantity: p.minOrderQuantity != null ? String(p.minOrderQuantity) : '',
+      quantityStep: p.quantityStep != null ? String(p.quantityStep) : '',
     });
     setImageFile(null);
     setImageError('');
@@ -156,6 +177,11 @@ export default function ProductManagementPage() {
         lowStockThreshold: Number(form.lowStockThreshold),
         reorderLevel: Number(form.reorderLevel),
         reorderQuantity: Number(form.reorderQuantity),
+        unitType: form.unitType,
+        saleUnit: form.saleUnit || undefined,
+        allowCustomQuantity: form.allowCustomQuantity,
+        minOrderQuantity: form.minOrderQuantity !== '' ? Number(form.minOrderQuantity) : undefined,
+        quantityStep: form.quantityStep !== '' ? Number(form.quantityStep) : undefined,
       });
       setModal(null);
       load();
@@ -198,6 +224,11 @@ export default function ProductManagementPage() {
         unitPrice: Number(form.unitPrice),
         imageUrl: imageUrl || undefined,
         status: form.status,
+        unitType: form.unitType,
+        saleUnit: form.saleUnit || undefined,
+        allowCustomQuantity: form.allowCustomQuantity,
+        minOrderQuantity: form.minOrderQuantity !== '' ? Number(form.minOrderQuantity) : undefined,
+        quantityStep: form.quantityStep !== '' ? Number(form.quantityStep) : undefined,
       });
       setModal(null);
       setEditing(null);
@@ -216,6 +247,70 @@ export default function ProductManagementPage() {
       load();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const refreshEditingProduct = async () => {
+    if (!editing) return;
+    try {
+      const updated = await products.get(editing.id);
+      setEditing(updated);
+    } catch {
+      // ignore
+    }
+  };
+
+  const addUnit = async () => {
+    if (!editing) return;
+    const unitName = unitForm.unitName.trim();
+    const price = Number(unitForm.price);
+    const stock = Number(unitForm.stock) || 0;
+    if (!unitName || !Number.isFinite(price) || price < 0) {
+      setErr('Unit name and price (≥ 0) are required.');
+      return;
+    }
+    setAddingUnit(true);
+    setErr('');
+    try {
+      await products.addUnit(editing.id, { unitName, price, stock });
+      setUnitForm({ unitName: '', price: '', stock: '0' });
+      await refreshEditingProduct();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Failed to add unit');
+    } finally {
+      setAddingUnit(false);
+    }
+  };
+
+  const updateUnit = async (unitId: number) => {
+    if (!editing) return;
+    const unitName = editUnitForm.unitName.trim();
+    const price = Number(editUnitForm.price);
+    const stock = Number(editUnitForm.stock);
+    if (!unitName || !Number.isFinite(price) || price < 0) {
+      setErr('Unit name and price (≥ 0) are required.');
+      return;
+    }
+    setSaving(true);
+    setErr('');
+    try {
+      await products.updateUnit(editing.id, unitId, { unitName, price, stock: Number.isFinite(stock) && stock >= 0 ? stock : undefined });
+      setEditingUnitId(null);
+      await refreshEditingProduct();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Failed to update unit');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteUnit = async (unitId: number) => {
+    if (!editing || !confirm('Remove this purchase unit?')) return;
+    try {
+      await products.deleteUnit(editing.id, unitId);
+      await refreshEditingProduct();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Failed to delete unit');
     }
   };
 
@@ -323,7 +418,7 @@ export default function ProductManagementPage() {
               <input type="text" placeholder="SKU" value={form.sku} onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
               <input type="text" placeholder="Category" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
               <textarea placeholder="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
-              <input type="text" placeholder="Specifications (JSON or text)" value={form.specifications} onChange={(e) => setForm((f) => ({ ...f, specifications: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
+              <input type="text" placeholder="Specifications" value={form.specifications} onChange={(e) => setForm((f) => ({ ...f, specifications: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
               <input type="number" step="0.01" placeholder="Unit price *" value={form.unitPrice} onChange={(e) => setForm((f) => ({ ...f, unitPrice: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
               <div>
                 <label className="block text-sm text-slate-400 mb-1">Product image (JPG/PNG, max 2MB)</label>
@@ -341,8 +436,22 @@ export default function ProductManagementPage() {
                   <span style={{ color: 'var(--admin-text)' }}>Inactive</span>
                 </label>
               </div>
-              <input type="number" placeholder="Initial quantity" value={form.initialQuantity} onChange={(e) => setForm((f) => ({ ...f, initialQuantity: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
-              <input type="number" placeholder="Low stock threshold" value={form.lowStockThreshold} onChange={(e) => setForm((f) => ({ ...f, lowStockThreshold: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Unit type</label>
+                <select value={form.unitType} onChange={(e) => setForm((f) => ({ ...f, unitType: e.target.value as 'piece' | 'kg' | 'meter' }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white" style={{ borderColor: 'var(--admin-border)' }}>
+                  <option value="piece">Piece</option>
+                  <option value="kg">Kg</option>
+                  <option value="meter">Meter</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Initial quantity</label>
+                <input type="number" min="0" placeholder="Initial quantity" value={form.initialQuantity} onChange={(e) => setForm((f) => ({ ...f, initialQuantity: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Low stock threshold</label>
+                <input type="number" min="0" placeholder="Alert when stock falls below this number" value={form.lowStockThreshold} onChange={(e) => setForm((f) => ({ ...f, lowStockThreshold: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
+              </div>
             </div>
             <div className="mt-4 flex gap-2">
               <button type="button" onClick={saveAdd} disabled={!form.name.trim() || !form.unitPrice} className="px-4 py-2.5 bg-[#2563EB] text-white rounded-xl hover:bg-[#1D4ED8] btn-3d disabled:opacity-50">Save</button>
@@ -363,7 +472,7 @@ export default function ProductManagementPage() {
               <input type="text" placeholder="SKU" value={form.sku} onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
               <input type="text" placeholder="Category" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
               <textarea placeholder="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
-              <input type="text" placeholder="Specifications (JSON or text)" value={form.specifications} onChange={(e) => setForm((f) => ({ ...f, specifications: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
+              <input type="text" placeholder="Specifications" value={form.specifications} onChange={(e) => setForm((f) => ({ ...f, specifications: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
               <input type="number" step="0.01" placeholder="Unit price *" value={form.unitPrice} onChange={(e) => setForm((f) => ({ ...f, unitPrice: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
               <div>
                 <label className="block text-sm text-slate-400 mb-1">Product image (JPG/PNG, max 2MB) — optional, replace current</label>
@@ -380,6 +489,49 @@ export default function ProductManagementPage() {
                   <input type="radio" name="status-edit" checked={form.status === 'inactive'} onChange={() => setForm((f) => ({ ...f, status: 'inactive' }))} className="rounded-full" />
                   <span style={{ color: 'var(--admin-text)' }}>Inactive</span>
                 </label>
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Unit type</label>
+                <select value={form.unitType} onChange={(e) => setForm((f) => ({ ...f, unitType: e.target.value as 'piece' | 'kg' | 'meter' }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white" style={{ borderColor: 'var(--admin-border)' }}>
+                  <option value="piece">Piece</option>
+                  <option value="kg">Kg</option>
+                  <option value="meter">Meter</option>
+                </select>
+              </div>
+              <div className="border-t pt-4 mt-4" style={{ borderColor: 'var(--admin-border)' }}>
+                <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--admin-text)' }}>Purchase units (optional)</h3>
+                <p className="text-xs text-slate-500 mb-3">When set, customers choose how to buy (e.g. kg, piece, box). Each unit has its own price and stock.</p>
+                {(editing?.productUnits && editing.productUnits.length > 0) && (
+                  <ul className="space-y-2 mb-4">
+                    {editing.productUnits.map((u: ProductUnit) => (
+                      <li key={u.id} className="flex flex-wrap items-center gap-2 py-2 px-3 rounded-lg" style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                        {editingUnitId === u.id ? (
+                          <>
+                            <input type="text" value={editUnitForm.unitName} onChange={(e) => setEditUnitForm((f) => ({ ...f, unitName: e.target.value }))} placeholder="Unit name" className="w-24 px-2 py-1 rounded border text-sm" style={{ ...CARD_BG, borderColor: 'var(--admin-border)' }} />
+                            <input type="number" step="0.01" value={editUnitForm.price} onChange={(e) => setEditUnitForm((f) => ({ ...f, price: e.target.value }))} placeholder="Price" className="w-20 px-2 py-1 rounded border text-sm" style={{ ...CARD_BG, borderColor: 'var(--admin-border)' }} />
+                            <input type="number" step="0.01" value={editUnitForm.stock} onChange={(e) => setEditUnitForm((f) => ({ ...f, stock: e.target.value }))} placeholder="Stock" className="w-16 px-2 py-1 rounded border text-sm" style={{ ...CARD_BG, borderColor: 'var(--admin-border)' }} />
+                            <button type="button" onClick={() => updateUnit(u.id)} disabled={saving} className="px-2 py-1 text-xs font-medium text-white bg-[#2563EB] rounded hover:bg-[#1D4ED8] disabled:opacity-50">Save</button>
+                            <button type="button" onClick={() => { setEditingUnitId(null); setErr(''); }} className="px-2 py-1 text-xs rounded border" style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-text)' }}>Cancel</button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-medium text-sm" style={{ color: 'var(--admin-text)' }}>{u.unitName}</span>
+                            <span className="text-slate-400 text-sm">{CURRENCY}{u.price.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-slate-500 text-xs">stock: {u.stock}</span>
+                            <button type="button" onClick={() => { setEditingUnitId(u.id); setEditUnitForm({ unitName: u.unitName, price: String(u.price), stock: String(u.stock) }); }} className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-white/10" title="Edit unit"><PencilIcon /></button>
+                            <button type="button" onClick={() => deleteUnit(u.id)} className="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-white/10" title="Delete unit"><TrashIcon /></button>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex flex-wrap items-end gap-2">
+                  <input type="text" value={unitForm.unitName} onChange={(e) => setUnitForm((f) => ({ ...f, unitName: e.target.value }))} placeholder="Unit (e.g. kg, box)" className="w-28 px-3 py-2 rounded-lg border text-sm" style={{ ...CARD_BG, borderColor: 'var(--admin-border)' }} />
+                  <input type="number" step="0.01" value={unitForm.price} onChange={(e) => setUnitForm((f) => ({ ...f, price: e.target.value }))} placeholder="Price" className="w-24 px-3 py-2 rounded-lg border text-sm" style={{ ...CARD_BG, borderColor: 'var(--admin-border)' }} />
+                  <input type="number" step="0.01" min="0" value={unitForm.stock} onChange={(e) => setUnitForm((f) => ({ ...f, stock: e.target.value }))} placeholder="Stock" className="w-20 px-3 py-2 rounded-lg border text-sm" style={{ ...CARD_BG, borderColor: 'var(--admin-border)' }} />
+                  <button type="button" onClick={addUnit} disabled={addingUnit || !unitForm.unitName.trim()} className="px-3 py-2 rounded-lg text-sm font-medium text-white bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-50">{addingUnit ? 'Adding...' : 'Add unit'}</button>
+                </div>
               </div>
             </div>
             <div className="mt-4 flex gap-2">

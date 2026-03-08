@@ -1,9 +1,11 @@
 import { runDemandPrediction } from './aiAnalytics.js';
+import { runInventoryAiStockCheck } from './inventoryAiAlerts.js';
 import { createNotificationForAdmins } from './notifications.js';
 import { evaluateRiskAndNotify } from './riskNotifications.js';
 import { prisma } from '../lib/prisma.js';
 
 const DAILY_MS = 24 * 60 * 60 * 1000;
+const HOURLY_MS = 60 * 60 * 1000;
 const RISK_CHECK_MS = 15 * 60 * 1000; // 15 minutes
 const INITIAL_DELAY_MS = 60 * 1000; // Run first time 1 minute after server start
 
@@ -45,4 +47,23 @@ export function startScheduledAI(): void {
     runScheduledRiskCheck();
     setInterval(runScheduledRiskCheck, RISK_CHECK_MS);
   }, INITIAL_DELAY_MS + 10 * 1000);
+
+  // AI inventory alerts: run every hour (low stock detection + suggested reorder)
+  setTimeout(async () => {
+    try {
+      const result = await runInventoryAiStockCheck(prisma);
+      if (result.alertsCreated > 0 || result.alertsUpdated > 0) {
+        console.log(`[AI Inventory] Alerts: ${result.alertsCreated} created, ${result.alertsUpdated} updated`);
+      }
+    } catch (e) {
+      console.error('Hourly AI inventory stock check failed:', e);
+    }
+    setInterval(async () => {
+      try {
+        await runInventoryAiStockCheck(prisma);
+      } catch (e) {
+        console.error('Hourly AI inventory stock check failed:', e);
+      }
+    }, HOURLY_MS);
+  }, INITIAL_DELAY_MS + 30 * 1000);
 }

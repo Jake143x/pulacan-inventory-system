@@ -468,11 +468,26 @@ export default function InventoryPage() {
             <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--admin-text)' }}>Adjust stock — {adjusting.product?.name}</h2>
             <div className="space-y-3">
               <p className="text-sm text-slate-400">Current quantity: <span className="font-medium text-white">{adjusting.quantity}</span></p>
-              <input type="number" placeholder="Stock adjustment (+/-)" value={adjustForm.quantityAdjust} onChange={(e) => setAdjustForm((f) => ({ ...f, quantityAdjust: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} title="Add or subtract from current quantity" />
-              <input type="text" placeholder="Movement notes (optional)" value={adjustForm.movementNotes} onChange={(e) => setAdjustForm((f) => ({ ...f, movementNotes: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
-              <input type="number" placeholder="Low stock threshold" value={adjustForm.lowStockThreshold} onChange={(e) => setAdjustForm((f) => ({ ...f, lowStockThreshold: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
-              <input type="number" placeholder="Reorder level" value={adjustForm.reorderLevel} onChange={(e) => setAdjustForm((f) => ({ ...f, reorderLevel: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
-              <input type="number" placeholder="Reorder quantity" value={adjustForm.reorderQuantity} onChange={(e) => setAdjustForm((f) => ({ ...f, reorderQuantity: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Stock adjustment (+/-)</label>
+                <input type="number" placeholder="Add or subtract from current quantity" value={adjustForm.quantityAdjust} onChange={(e) => setAdjustForm((f) => ({ ...f, quantityAdjust: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Movement notes (optional)</label>
+                <input type="text" placeholder="e.g. Restock, damaged" value={adjustForm.movementNotes} onChange={(e) => setAdjustForm((f) => ({ ...f, movementNotes: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Low stock threshold</label>
+                <input type="number" placeholder="Alert when stock falls below this number" value={adjustForm.lowStockThreshold} onChange={(e) => setAdjustForm((f) => ({ ...f, lowStockThreshold: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Reorder level</label>
+                <input type="number" placeholder="When qty ≤ this, show Low Stock" value={adjustForm.reorderLevel} onChange={(e) => setAdjustForm((f) => ({ ...f, reorderLevel: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Reorder quantity</label>
+                <input type="number" placeholder="Suggested order quantity (overstock if above this)" value={adjustForm.reorderQuantity} onChange={(e) => setAdjustForm((f) => ({ ...f, reorderQuantity: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border bg-slate-800/50 text-white placeholder-slate-500" style={{ borderColor: 'var(--admin-border)' }} />
+              </div>
             </div>
             <div className="mt-4 flex gap-2">
               <button type="button" onClick={saveAdjust} className="px-4 py-2.5 bg-[#2563EB] text-white rounded-xl hover:bg-[#1D4ED8] btn-3d">Save</button>

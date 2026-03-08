@@ -26,9 +26,9 @@
 
 html {
   font-family: 'Poppins', system-ui, sans-serif;
+  overflow-x: hidden;
 }
 
-/* Same gradient used for body and any full-page admin views (login, layout, redirects) */
 .admin-canvas {
   background: linear-gradient(160deg, #0F172A 0%, #1E293B 40%, #334155 100%);
   background-attachment: fixed;
@@ -39,7 +39,9 @@ body {
   background: linear-gradient(160deg, #0F172A 0%, #1E293B 40%, #334155 100%);
   background-attachment: fixed;
   color: var(--admin-text);
+  min-height: 100dvh;
   min-height: 100vh;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: 0.01em;
@@ -77,6 +79,15 @@ body {
 }
 .sidebar-3d {
   box-shadow: 4px 0 24px rgb(0 0 0 / 0.25), 2px 0 8px rgb(0 0 0 / 0.2);
+}
+
+/* Responsive tables: scroll horizontally on small screens */
+.admin-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.admin-table-wrap table {
+  min-width: 600px;
 }
 
 @keyframes fade-in-row {

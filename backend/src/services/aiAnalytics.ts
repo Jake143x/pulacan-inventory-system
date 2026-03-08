@@ -91,11 +91,13 @@ export async function runDemandPrediction(prisma: PrismaClient, daysAhead = 7) {
   return predictions;
 }
 
-export async function getLatestPredictions(prisma: PrismaClient) {
+export async function getLatestPredictions(prisma: PrismaClient, options?: { includeInventory?: boolean }) {
   const latest = await prisma.aiPrediction.findMany({
     orderBy: { generatedAt: 'desc' },
     take: 1000,
-    include: { product: true },
+    include: {
+      product: options?.includeInventory ? { include: { inventory: true } } : true,
+    },
   });
   const byProduct = new Map<number, (typeof latest)[0]>();
   for (const p of latest) {

@@ -13,6 +13,8 @@ import { analyticsRouter } from './routes/analytics.js';
 import { aiRouter } from './routes/ai.js';
 import { configRouter } from './routes/config.js';
 import { notificationsRouter } from './routes/notifications.js';
+import { inventoryAiRouter } from './routes/inventoryAi.js';
+import { chatRouter } from './routes/chat.js';
 import { uploadRouter } from './routes/upload.js';
 import { rateLimiter } from './middleware/rateLimit.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -39,6 +41,8 @@ app.use('/api/analytics', analyticsRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/config', configRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/inventory-ai', inventoryAiRouter);
+app.use('/api/chat', chatRouter);
 
 app.get('/api/health', (_req, res) =>
   res.json({
@@ -58,7 +62,14 @@ app.get('/', (_req, res) => {
 
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Inventory API running at http://localhost:${PORT}`);
   startScheduledAI();
+});
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\nPort ${PORT} is already in use. Either:\n  1. Stop the other process using port ${PORT}\n  2. Or set PORT to another number (e.g. set PORT=3002)\n`);
+  }
+  process.exit(1);
 });

@@ -15,7 +15,7 @@ import {
 } from 'recharts';
 import { Link } from 'react-router-dom';
 import { reports, ai } from '../api/client';
-import type { AiPrediction } from '../api/client';
+import type { AiPrediction, AiForecastRow } from '../api/client';
 
 const CURRENCY = '₱';
 
@@ -80,6 +80,9 @@ export default function ReportsPage() {
   const [predictions, setPredictions] = useState<AiPrediction[]>([]);
   const [predictLoading, setPredictLoading] = useState(false);
   const [runningPredict, setRunningPredict] = useState(false);
+  const [forecastRangeDays, setForecastRangeDays] = useState(7);
+  const [forecastResults, setForecastResults] = useState<AiForecastRow[] | null>(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
 
   const effectiveRange = useCustomRange
     ? { start: startDate, end: endDate }
@@ -129,6 +132,22 @@ export default function ReportsPage() {
       // ignore
     } finally {
       setRunningPredict(false);
+    }
+  };
+
+  const runForecast = async () => {
+    const days = Math.max(1, Math.min(365, Math.round(forecastRangeDays) || 7));
+    setForecastLoading(true);
+    setForecastResults(null);
+    try {
+      const res = await ai.forecast(days);
+      setForecastResults(res.data ?? []);
+      setForecastRangeDays(res.forecastRangeDays ?? days);
+      loadPredictions();
+    } catch {
+      setForecastResults([]);
+    } finally {
+      setForecastLoading(false);
     }
   };
 
@@ -459,16 +478,73 @@ export default function ReportsPage() {
           <div className="bg-neutral-900 rounded-xl border border-neutral-600 p-5 card-3d">
             <h2 className="font-semibold text-white mb-1">Demand forecasting & reorder</h2>
             <p className="text-xs text-neutral-300 mb-4">Predictive analytics: demand forecast and suggested restock. Use the <Link to="/ai" className="text-[#2563EB] hover:underline">Assistant</Link> to ask for demand forecast or reorder suggestions.</p>
-            <div className="flex flex-wrap gap-2 mb-4">
-              <button type="button" onClick={runPredict} disabled={runningPredict} className="px-4 py-2 bg-[#2563EB] text-white rounded-lg hover:bg-[#1D4ED8] disabled:opacity-50 font-medium text-sm btn-3d">
-                {runningPredict ? 'Generating...' : 'Generate predictions'}
+            <div className="flex flex-wrap items-end gap-4 mb-4">
+              <div>
+                <label htmlFor="forecast-days" className="block text-xs text-neutral-400 mb-1">AI Forecast Range</label>
+                <p className="text-xs text-neutral-500 mb-1">Enter number of days:</p>
+                <input
+                  id="forecast-days"
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={forecastRangeDays}
+                  onChange={(e) => setForecastRangeDays(Math.max(1, Math.min(365, parseInt(e.target.value, 10) || 7)))}
+                  className="w-24 px-3 py-2 bg-neutral-800 border border-neutral-600 rounded-lg text-white text-sm"
+                />
+              </div>
+              <button type="button" onClick={runForecast} disabled={forecastLoading} className="px-4 py-2 bg-[#2563EB] text-white rounded-lg hover:bg-[#1D4ED8] disabled:opacity-50 font-medium text-sm btn-3d">
+                {forecastLoading ? 'Running…' : 'Run Forecast'}
+              </button>
+              <button type="button" onClick={runPredict} disabled={runningPredict} className="px-4 py-2 bg-neutral-700 text-neutral-200 rounded-lg hover:bg-neutral-600 disabled:opacity-50 text-sm">
+                {runningPredict ? 'Generating…' : 'Generate predictions'}
               </button>
               <button type="button" onClick={loadPredictions} disabled={predictLoading} className="px-4 py-2 bg-neutral-700 text-neutral-200 rounded-lg hover:bg-neutral-600 disabled:opacity-50 text-sm">Refresh</button>
             </div>
-            {predictLoading ? (
+            {forecastLoading ? (
+              <p className="text-neutral-400 text-sm">Running forecast…</p>
+            ) : forecastResults !== null ? (
+              <>
+                <p className="text-neutral-400 text-sm mb-3">Forecast range: <strong className="text-white">{forecastRangeDays}</strong> days</p>
+                <div className="overflow-x-auto max-h-64 overflow-y-auto mb-4">
+                  <table className="w-full text-sm">
+                    <thead className="bg-neutral-800/80">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-neutral-300">Product</th>
+                        <th className="px-4 py-2 text-left text-neutral-300">Predicted demand</th>
+                        <th className="px-4 py-2 text-left text-neutral-300">Current stock</th>
+                        <th className="px-4 py-2 text-left text-neutral-300">Reorder recommendation</th>
+                        <th className="px-4 py-2 text-left text-neutral-300">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-700">
+                      {forecastResults.slice(0, 50).map((p) => {
+                        const currentStock = p.product?.inventory?.quantity ?? 0;
+                        const sufficient = currentStock >= p.predictedDemand;
+                        const unit = p.product?.unitType === 'kg' ? 'kg' : p.product?.unitType === 'meter' ? 'm' : 'pcs';
+                        return (
+                          <tr key={p.id} className="text-neutral-200">
+                            <td className="px-4 py-2">{p.product?.name ?? '-'}</td>
+                            <td className="px-4 py-2">{p.predictedDemand} {unit}</td>
+                            <td className="px-4 py-2">{currentStock} {unit}</td>
+                            <td className="px-4 py-2">{p.suggestedRestock > 0 ? `${p.suggestedRestock} ${unit}` : '—'}</td>
+                            <td className="px-4 py-2">
+                              {sufficient ? (
+                                <span className="text-emerald-400">Stock is sufficient</span>
+                              ) : (
+                                <span className="text-amber-400 font-medium">LOW STOCK ALERT</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : predictLoading ? (
               <p className="text-neutral-400 text-sm">Loading predictions...</p>
             ) : predictions.length === 0 ? (
-              <p className="text-neutral-400 text-sm">No demand predictions yet. Click &quot;Generate predictions&quot; to run predictive analytics (uses last 30 days of sales).</p>
+              <p className="text-neutral-400 text-sm">No demand predictions yet. Enter days and click &quot;Run Forecast&quot; to run predictive analytics (uses last 30 days of sales).</p>
             ) : (
               <>
                 <div className="overflow-x-auto max-h-48 overflow-y-auto mb-4">

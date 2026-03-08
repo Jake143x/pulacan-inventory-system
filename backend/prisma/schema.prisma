@@ -3,7 +3,7 @@
 
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x", "rhel-openssl-3.0.x"]
+  binaryTargets = ["native"]
 }
 
 datasource db {
@@ -37,6 +37,7 @@ model User {
   orders              OnlineOrder[]
   notifications       Notification[]
   inventoryMovements  InventoryMovement[]
+  chatSessions        ChatSession[]
 }
 
 model Product {
@@ -46,18 +47,28 @@ model Product {
   category              String?
   description           String?
   specifications        String?                // JSON string for key-value specs
-  unitPrice             Float
+  unitPrice             Float                  // fallback when no productUnits
   imageUrl              String?                // stored path e.g. /api/uploads/products/xxx.jpg
   status                String                 @default("active") // active | inactive
+  unitType              String                 @default("piece") // piece | kg | meter
+  saleUnit              String?
+  allowCustomQuantity   Boolean                @default(false)
+  minOrderQuantity      Float?
+  quantityStep          Float?
+  supplierId            Int?
+  supplier              Supplier?              @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   inventory             Inventory?
+  productUnits          ProductUnit[]
   saleItems             SaleItem[]
   orderItems            OrderItem[]
   aiPredictions         AiPrediction[]
   inventoryMovements    InventoryMovement[]
   notifications         Notification[]
   productRiskSnapshot   ProductRiskSnapshot?
+  inventoryAiAlerts     InventoryAiAlert[]
+  purchaseOrders        PurchaseOrder[]
 
   @@index([name])
   @@index([category])
@@ -68,11 +79,27 @@ model Inventory {
   id                 Int      @id @default(autoincrement())
   productId          Int      @unique
   product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  quantity           Int      @default(0)
+  quantity           Float    @default(0)   // supports decimal for kg, meters, etc.
   lowStockThreshold  Int      @default(10)  // Minimum stock threshold (warning/reorder level)
   reorderLevel       Int      @default(10)  // When qty <= this, show Low Stock
   reorderQuantity    Int      @default(100) // Suggested order quantity; qty > this = overstocked
   updatedAt          DateTime @updatedAt
+}
+
+model ProductUnit {
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  unitName   String   // kg, piece, bag, box, meter, liter, sheet, roll, etc.
+  price      Float
+  stock      Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  orderItems OrderItem[]
+  saleItems  SaleItem[]
+
+  @@unique([productId, unitName])
+  @@index([productId])
 }
 
 model InventoryMovement {
@@ -80,7 +107,7 @@ model InventoryMovement {
   productId Int
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   type      String   // STOCK_IN, STOCK_OUT, ADJUSTMENT
-  quantity  Int      // positive for IN, negative for OUT
+  quantity  Float    // positive for IN, negative for OUT
   userId    Int?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   notes     String?
@@ -100,14 +127,17 @@ model SaleTransaction {
 }
 
 model SaleItem {
-  id         Int              @id @default(autoincrement())
-  saleId     Int
-  sale       SaleTransaction  @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  productId  Int
-  product   Product          @relation(fields: [productId], references: [id])
-  quantity   Int
-  unitPrice  Float
-  subtotal   Float
+  id            Int              @id @default(autoincrement())
+  saleId        Int
+  sale          SaleTransaction  @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId     Int
+  product       Product          @relation(fields: [productId], references: [id])
+  productUnitId Int?
+  productUnit   ProductUnit?     @relation(fields: [productUnitId], references: [id], onDelete: SetNull)
+  unitName      String?           // denormalized for display
+  quantity      Float            // supports decimal (e.g. 2.5 kg, 3.5 meters)
+  unitPrice     Float
+  subtotal      Float
 }
 
 model OnlineOrder {
@@ -130,14 +160,17 @@ model OnlineOrder {
 }
 
 model OrderItem {
-  id         Int         @id @default(autoincrement())
-  orderId    Int
-  order      OnlineOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId  Int
-  product   Product     @relation(fields: [productId], references: [id])
-  quantity   Int
-  unitPrice  Float
-  subtotal   Float
+  id            Int         @id @default(autoincrement())
+  orderId       Int
+  order         OnlineOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId     Int
+  product       Product     @relation(fields: [productId], references: [id])
+  productUnitId Int?
+  productUnit   ProductUnit? @relation(fields: [productUnitId], references: [id], onDelete: SetNull)
+  unitName      String?     // denormalized for display
+  quantity      Float       // supports decimal (e.g. 2.5 kg, 3.5 meters)
+  unitPrice     Float
+  subtotal      Float
 }
 
 model AiPrediction {
@@ -184,4 +217,75 @@ model SystemConfig {
   id    Int    @id @default(autoincrement())
   key   String @unique
   value String
+}
+
+model Supplier {
+  id        Int                 @id @default(autoincrement())
+  name      String
+  email     String?
+  contact   String?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  products  Product[]
+  alerts    InventoryAiAlert[]
+  purchaseOrders PurchaseOrder[]
+}
+
+model InventoryAiAlert {
+  id               Int       @id @default(autoincrement())
+  productId        Int
+  product          Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productName      String
+  currentStock     Float
+  predictedDemand  Float
+  suggestedReorder Float
+  supplierId       Int?
+  supplier         Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  status           String    @default("active") // active | acknowledged | po_generated
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([productId])
+  @@index([status])
+}
+
+model PurchaseOrder {
+  id         Int       @id @default(autoincrement())
+  supplierId Int
+  supplier   Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity   Float
+  status     String    @default("pending") // pending | sent | confirmed
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([supplierId])
+  @@index([productId])
+}
+
+// Live chat: customer ↔ cashier
+model ChatSession {
+  id          Int           @id @default(autoincrement())
+  customerId  Int
+  customer    User          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  status      String         @default("open") // open | closed
+  createdAt   DateTime       @default(now())
+  messages    ChatMessage[]
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model ChatMessage {
+  id          Int         @id @default(autoincrement())
+  sessionId   Int
+  session     ChatSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  senderType  String      // customer | cashier
+  message     String      @db.Text  // can be empty when imageUrl is set
+  imageUrl    String?     // optional image attachment URL
+  createdAt   DateTime    @default(now())
+
+  @@index([sessionId])
+  @@index([createdAt])
 }

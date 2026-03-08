@@ -4,7 +4,7 @@ import { reports } from '../../api/client';
 import type { SaleTransaction } from '../../api/client';
 
 const CURRENCY = '₱';
-const POLL_INTERVAL_MS = 10000;
+const POLL_INTERVAL_MS = 5000; // Refresh every 5s so completed sales show in live list quickly
 
 function getTodayDateString() {
   return new Date().toISOString().slice(0, 10);
@@ -35,7 +35,12 @@ export default function CashierDashboard() {
   useEffect(() => {
     load();
     const t = setInterval(load, POLL_INTERVAL_MS);
-    return () => clearInterval(t);
+    const onFocus = () => load(); // Refresh when user returns to tab (e.g. after completing a sale on POS)
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('focus', onFocus);
+    };
   }, []);
 
   return (
@@ -89,7 +94,7 @@ export default function CashierDashboard() {
       {/* Row 2: Recent POS transactions — same card style as admin */}
       <div className="rounded-2xl border overflow-hidden card-3d" style={cardBg}>
         <h3 className="px-5 py-4 border-b font-semibold text-base flex items-center gap-2" style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-text)' }}>
-          Recent POS transactions
+          Recent POS transactions (today)
           <span className="text-xs font-normal text-emerald-400">LIVE</span>
         </h3>
         <div className="overflow-x-auto max-h-72 overflow-y-auto">
@@ -104,18 +109,21 @@ export default function CashierDashboard() {
             </thead>
             <tbody>
               {recentTransactions.length === 0 ? (
-                <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-500 text-sm">No transactions yet. The cashier who processes each sale will appear in the Cashier column.</td></tr>
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-500 text-sm">No transactions today yet. Resets daily.</td></tr>
               ) : (
-                recentTransactions.map((t) => (
-                  <tr key={t.id} className="border-b" style={{ borderColor: 'var(--admin-border)' }}>
-                    <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap">
-                      {new Date(t.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-sm" style={{ color: 'var(--admin-text)' }}>#{t.id}</td>
-                    <td className="px-4 py-3 text-sm tabular-nums" style={{ color: 'var(--admin-text)' }}>{CURRENCY}{t.total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-4 py-3 text-sm text-slate-300" title="Cashier on duty when this sale was completed">{t.user?.fullName ?? '—'}</td>
-                  </tr>
-                ))
+                recentTransactions.map((t, index) => {
+                  const dailyInvoiceNum = recentTransactions.length - index;
+                  return (
+                    <tr key={t.id} className="border-b" style={{ borderColor: 'var(--admin-border)' }}>
+                      <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap">
+                        {new Date(t.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-sm" style={{ color: 'var(--admin-text)' }}>#{dailyInvoiceNum}</td>
+                      <td className="px-4 py-3 text-sm tabular-nums" style={{ color: 'var(--admin-text)' }}>{CURRENCY}{t.total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                      <td className="px-4 py-3 text-sm text-slate-300" title="Cashier on duty when this sale was completed">{t.user?.fullName ?? '—'}</td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -17,7 +17,7 @@ router.post(
   authenticate,
   body('items').isArray(),
   body('items.*.productId').isInt(),
-  body('items.*.quantity').isInt({ min: 1 }),
+  body('items.*.quantity').isFloat({ min: 0.001 }),
   body('paymentMethod').optional().isIn(PAYMENT_METHODS),
   body('streetAddress').trim().notEmpty().withMessage('Street address is required').isLength({ max: 200 }),
   body('barangay').trim().notEmpty().withMessage('Barangay is required').isLength({ max: 100 }),
@@ -30,7 +30,7 @@ router.post(
       const errors = validationResult(req);
       if (!errors.isEmpty()) throw new AppError(400, errors.array()[0]?.msg ?? 'Validation failed');
       const userId = req.user!.id;
-      const items = req.body.items as Array<{ productId: number; quantity: number }>;
+      const items = req.body.items as Array<{ productId: number; quantity: number; unitName?: string }>;
       const paymentMethod = PAYMENT_METHODS.includes(req.body.paymentMethod) ? req.body.paymentMethod : null;
       const streetAddress = (req.body.streetAddress as string)?.trim();
       const barangay = (req.body.barangay as string)?.trim();
@@ -41,31 +41,53 @@ router.post(
       const productIds = [...new Set(items.map((i) => i.productId))];
       const products = await prisma.product.findMany({
         where: { id: { in: productIds } },
-        include: { inventory: true },
+        include: { inventory: true, productUnits: true },
       });
       const productMap = new Map(products.map((p) => [p.id, p]));
       let total = 0;
-      const orderItems: Array<{ productId: number; quantity: number; unitPrice: number; subtotal: number }> = [];
+      const orderItems: Array<{ productId: number; productUnitId?: number; unitName?: string; quantity: number; unitPrice: number; subtotal: number }> = [];
       for (const item of items) {
         const product = productMap.get(item.productId);
         if (!product) throw new AppError(400, `Product ${item.productId} not found`);
-        const inv = product.inventory;
-        if (!inv || inv.quantity < item.quantity) {
-          throw new AppError(400, `Insufficient stock for ${product.name}. Available: ${inv?.quantity ?? 0}`);
+        const qty = Number(item.quantity);
+        const unitName = typeof item.unitName === 'string' && item.unitName.trim() ? item.unitName.trim() : null;
+
+        let unitPrice: number;
+        let productUnitId: number | null = null;
+        let stockOk = false;
+
+        if (unitName && product.productUnits && product.productUnits.length > 0) {
+          const pu = product.productUnits.find((u) => u.unitName.toLowerCase() === unitName.toLowerCase());
+          if (!pu) throw new AppError(400, `Unit "${unitName}" not found for ${product.name}`);
+          if (pu.stock < qty) throw new AppError(400, `Insufficient stock for ${product.name} (${unitName}). Available: ${pu.stock}`);
+          unitPrice = pu.price;
+          productUnitId = pu.id;
+          stockOk = true;
+        } else {
+          const inv = product.inventory;
+          if (!inv || inv.quantity < qty) {
+            throw new AppError(400, `Insufficient stock for ${product.name}. Available: ${inv?.quantity ?? 0}`);
+          }
+          unitPrice = product.unitPrice;
+          stockOk = true;
         }
-        const unitPrice = product.unitPrice;
-        const subtotal = unitPrice * item.quantity;
+
+        const subtotal = unitPrice * qty;
         total += subtotal;
-        orderItems.push({ productId: product.id, quantity: item.quantity, unitPrice, subtotal });
+        orderItems.push({
+          productId: product.id,
+          productUnitId: productUnitId ?? undefined,
+          unitName: unitName ?? undefined,
+          quantity: qty,
+          unitPrice,
+          subtotal,
+        });
       }
-      // Cash and Debit = paid on the spot → auto-approve. GCash = pay later/scan → pending approval.
-      const autoApprove = paymentMethod === 'CASH_ON_DELIVERY' || paymentMethod === 'DEBIT_CARD';
-      const status = autoApprove ? 'APPROVED' : 'PENDING_APPROVAL';
 
       const order = await prisma.onlineOrder.create({
         data: {
           userId,
-          status,
+          status: paymentMethod === 'CASH_ON_DELIVERY' || paymentMethod === 'DEBIT_CARD' ? 'APPROVED' : 'PENDING_APPROVAL',
           total,
           paymentMethod,
           streetAddress,
@@ -74,17 +96,34 @@ router.post(
           province,
           zipCode,
           landmark,
-          items: { create: orderItems },
+          items: {
+            create: orderItems.map((oi) => ({
+              productId: oi.productId,
+              productUnitId: oi.productUnitId ?? null,
+              unitName: oi.unitName ?? null,
+              quantity: oi.quantity,
+              unitPrice: oi.unitPrice,
+              subtotal: oi.subtotal,
+            })),
+          },
         },
-        include: { items: { include: { product: true } } },
+        include: { items: { include: { product: true, productUnit: true } } },
       });
 
+      const autoApprove = paymentMethod === 'CASH_ON_DELIVERY' || paymentMethod === 'DEBIT_CARD';
       if (autoApprove) {
         for (const item of orderItems) {
-          await prisma.inventory.update({
-            where: { productId: item.productId },
-            data: { quantity: { decrement: item.quantity } },
-          });
+          if (item.productUnitId != null) {
+            await prisma.productUnit.update({
+              where: { id: item.productUnitId },
+              data: { stock: { decrement: item.quantity } },
+            });
+          } else {
+            await prisma.inventory.update({
+              where: { productId: item.productId },
+              data: { quantity: { decrement: item.quantity } },
+            });
+          }
         }
         await createNotification(prisma, userId, 'Order Approved', `Your order #${order.id} has been approved.`, 'ORDER_APPROVED');
       }
@@ -213,10 +252,17 @@ router.patch(
       if (order.status !== 'PENDING_APPROVAL') throw new AppError(400, 'Order already processed');
       if (action === 'approve') {
         for (const item of order.items) {
-          await prisma.inventory.update({
-            where: { productId: item.productId },
-            data: { quantity: { decrement: item.quantity } },
-          });
+          if (item.productUnitId != null) {
+            await prisma.productUnit.update({
+              where: { id: item.productUnitId },
+              data: { stock: { decrement: item.quantity } },
+            });
+          } else {
+            await prisma.inventory.update({
+              where: { productId: item.productId },
+              data: { quantity: { decrement: item.quantity } },
+            });
+          }
         }
         await prisma.onlineOrder.update({
           where: { id },

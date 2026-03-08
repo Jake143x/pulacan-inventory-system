@@ -19,11 +19,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== 'CUSTOMER') {
+    // Staff (CASHIER, ADMIN, OWNER) should use the Internal Panel — redirect immediately
+    window.location.href = ADMIN_PANEL_URL;
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
         <div className="bg-white rounded-2xl shadow-xl border border-slate-200/50 p-8 max-w-md text-center">
-          <h1 className="text-xl font-bold text-slate-900 mb-2">Administrative account</h1>
-          <p className="text-slate-600 mb-6">You are logged in as <strong>{user.role}</strong>. Use the Internal Administrative Panel for inventory, POS, and reports.</p>
+          <h1 className="text-xl font-bold text-slate-900 mb-2">Redirecting…</h1>
+          <p className="text-slate-600 mb-6">You are logged in as <strong>{user.role}</strong>. Opening the Internal Administrative Panel.</p>
+          <p className="text-sm text-slate-500 mb-4">If the panel asks you to log in, use the same account.</p>
           <a href={ADMIN_PANEL_URL} className="btn-store">Open Internal Administrative Panel</a>
           <p className="text-xs text-slate-400 mt-4">{ADMIN_PANEL_URL}</p>
         </div>

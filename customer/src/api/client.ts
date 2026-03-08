@@ -22,7 +22,21 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     ...(options.headers as Record<string, string>),
   };
   if (token) (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const isNetworkError =
+      message === 'Failed to fetch' ||
+      message === 'Load failed' ||
+      message.includes('NetworkError') ||
+      (e instanceof TypeError && message.toLowerCase().includes('fetch'));
+    const msg = isNetworkError
+      ? 'Connection failed. Start the backend first: from project root run npm run dev (starts backend + apps), or in a terminal run: cd backend && npm run dev. Then refresh this page.'
+      : message;
+    throw new Error(msg);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || res.statusText || 'Request failed');
   return data as T;
@@ -85,7 +99,7 @@ export const orders = {
   },
   get: (id: number) => api<OnlineOrder>(`/orders/${id}`),
   create: (
-    items: Array<{ productId: number; quantity: number }>,
+    items: Array<{ productId: number; quantity: number; unitName?: string }>,
     paymentMethod?: string,
     address?: ShippingAddress
   ) =>
@@ -111,6 +125,62 @@ export const ai = {
   chat: (message: string) =>
     api<{ reply: string }>('/ai/chat', { method: 'POST', body: JSON.stringify({ message }) }),
 };
+
+export const chat = {
+  createSession: () =>
+    api<ChatSession>('/chat/sessions', { method: 'POST' }),
+  listSessions: (params?: { status?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set('status', params.status);
+    const q = sp.toString();
+    return api<{ data: ChatSession[] }>(`/chat/sessions${q ? `?${q}` : ''}`);
+  },
+  getSession: (id: number) =>
+    api<ChatSessionWithMessages>(`/chat/sessions/${id}`),
+  sendMessage: (sessionId: number, message: string, senderType: 'customer' | 'cashier', imageUrl?: string | null) =>
+    api<ChatMessage>(`/chat/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message: message || '', senderType, ...(imageUrl ? { imageUrl } : {}) }),
+    }),
+  /** Upload an image for live chat. Returns { url }. */
+  uploadImage: async (sessionId: number, file: File): Promise<{ url: string }> => {
+    const token = localStorage.getItem('token');
+    const base = API_BASE_URL || '';
+    const uploadUrl = base ? `${base}/api/upload/chat` : '/api/upload/chat';
+    const form = new FormData();
+    form.append('image', file);
+    form.append('sessionId', String(sessionId));
+    const headers: HeadersInit = {};
+    if (token) (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(uploadUrl, { method: 'POST', body: form, headers });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText || 'Upload failed');
+    return data as { url: string };
+  },
+  closeSession: (id: number) =>
+    api<ChatSession>(`/chat/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'closed' }) }),
+};
+
+export interface ChatSession {
+  id: number;
+  customerId: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface ChatMessage {
+  id: number;
+  sessionId: number;
+  senderType: string;
+  message: string;
+  imageUrl?: string | null;
+  createdAt: string;
+}
+
+export interface ChatSessionWithMessages extends ChatSession {
+  customer?: { id: number; fullName: string; email: string };
+  messages: ChatMessage[];
+}
 
 export const notifications = {
   list: (params?: { page?: number; limit?: number; unread?: boolean }) => {
@@ -138,6 +208,14 @@ export interface User {
   profilePictureUrl?: string | null;
 }
 
+export interface ProductUnit {
+  id: number;
+  productId: number;
+  unitName: string;
+  price: number;
+  stock: number;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -146,9 +224,24 @@ export interface Product {
   description: string | null;
   specifications?: string | null;
   unitPrice: number;
-  /** Optional image URL — when set, product cards and detail page show this image; otherwise placeholder/logo is shown. */
   imageUrl?: string | null;
+  /** piece | kg | meter — API may send as unitType or unit_type */
+  unitType?: 'piece' | 'kg' | 'meter';
+  unit_type?: 'piece' | 'kg' | 'meter';
+  saleUnit?: string | null;
+  allowCustomQuantity?: boolean;
+  minOrderQuantity?: number | null;
+  quantityStep?: number | null;
   inventory?: { quantity: number; lowStockThreshold: number };
+  /** Multiple purchase units (kg, piece, box, etc.) — when present, customer selects one */
+  productUnits?: ProductUnit[];
+}
+
+/** Get product unit type (handles both unitType and unit_type from API). */
+export function getProductUnitType(p: Product | null | undefined): 'piece' | 'kg' | 'meter' {
+  if (!p) return 'piece';
+  const u = p.unitType ?? p.unit_type;
+  return u === 'kg' || u === 'meter' ? u : 'piece';
 }
 
 export interface ShippingAddress {
@@ -173,7 +266,7 @@ export interface OnlineOrder {
   zipCode?: string | null;
   landmark?: string | null;
   createdAt: string;
-  items: Array<{ productId: number; quantity: number; unitPrice: number; subtotal: number; product?: Product }>;
+  items: Array<{ productId: number; quantity: number; unitPrice: number; subtotal: number; unitName?: string | null; product?: Product }>;
 }
 
 export interface Notification {

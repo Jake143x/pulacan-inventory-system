@@ -22,10 +22,14 @@ function parseReportDateEnd(value: string | undefined, fallback: Date): Date {
 }
 
 router.use(authenticate);
-router.use(requireRoles('OWNER', 'ADMIN'));
+
+/** Roles that can access full reports (analytics, inventory, etc.). */
+const REPORT_ROLES = requireRoles('OWNER', 'ADMIN');
+/** Roles that can access sales summary and live POS list (includes CASHIER for dashboard). */
+const DASHBOARD_ROLES = requireRoles('OWNER', 'ADMIN', 'CASHIER');
 
 /** Single batch endpoint for Analytics page — one request instead of six to avoid rate limit. */
-router.get('/analytics', async (req, res, next) => {
+router.get('/analytics', REPORT_ROLES, async (req, res, next) => {
   try {
     const start = req.query.startDate as string;
     const end = req.query.endDate as string;
@@ -119,7 +123,7 @@ router.get('/analytics', async (req, res, next) => {
   }
 });
 
-router.get('/sales', async (req, res, next) => {
+router.get('/sales', DASHBOARD_ROLES, async (req, res, next) => {
   try {
     const start = req.query.startDate as string;
     const end = req.query.endDate as string;
@@ -144,11 +148,28 @@ router.get('/sales', async (req, res, next) => {
   }
 });
 
-/** Latest POS transactions for dashboard Live widget (includes cashier). */
-router.get('/latest-pos-transactions', async (req, res, next) => {
+/** Start of today in server local time (00:00:00.000). */
+function startOfTodayLocal(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+}
+
+/** End of today in server local time (23:59:59.999). */
+function endOfTodayLocal(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+}
+
+/** Latest POS transactions for dashboard Live widget — daily only, resets each day. Includes cashier. CASHIER can access. */
+router.get('/latest-pos-transactions', DASHBOARD_ROLES, async (req, res, next) => {
   try {
-    const limit = Math.min(20, Math.max(1, Number(req.query.limit) || 10));
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 10));
+    const startOfToday = startOfTodayLocal();
+    const endOfToday = endOfTodayLocal();
     const sales = await prisma.saleTransaction.findMany({
+      where: {
+        createdAt: { gte: startOfToday, lte: endOfToday },
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
       include: {
@@ -161,7 +182,7 @@ router.get('/latest-pos-transactions', async (req, res, next) => {
   }
 });
 
-router.get('/inventory', async (_req, res, next) => {
+router.get('/inventory', REPORT_ROLES, async (_req, res, next) => {
   try {
     const inv = await prisma.inventory.findMany({
       include: { product: true },
@@ -178,7 +199,7 @@ router.get('/inventory', async (_req, res, next) => {
   }
 });
 
-router.get('/best-selling', async (req, res, next) => {
+router.get('/best-selling', REPORT_ROLES, async (req, res, next) => {
   try {
     const start = req.query.startDate as string;
     const end = req.query.endDate as string;
@@ -212,7 +233,7 @@ router.get('/best-selling', async (req, res, next) => {
   }
 });
 
-router.get('/revenue-trends', async (req, res, next) => {
+router.get('/revenue-trends', REPORT_ROLES, async (req, res, next) => {
   try {
     const start = req.query.startDate as string;
     const end = req.query.endDate as string;
@@ -236,7 +257,7 @@ router.get('/revenue-trends', async (req, res, next) => {
 });
 
 /** Daily units sold for "Sales Volume" chart (by date). */
-router.get('/daily-units', async (req, res, next) => {
+router.get('/daily-units', REPORT_ROLES, async (req, res, next) => {
   try {
     const start = req.query.startDate as string;
     const end = req.query.endDate as string;
@@ -263,8 +284,84 @@ router.get('/daily-units', async (req, res, next) => {
   }
 });
 
+/** Sales chart: single day = hourly (revenue + orders per hour 00–23); multiple days = daily (revenue + orders per day). For dashboard with dual-line chart. */
+router.get('/sales-chart', REPORT_ROLES, async (req, res, next) => {
+  try {
+    const start = (req.query.startDate as string)?.trim();
+    const end = (req.query.endDate as string)?.trim();
+    if (!start || !end) {
+      return res.status(400).json({ error: 'startDate and endDate are required' });
+    }
+    const [y, m, d] = start.split('-').map(Number);
+    const startOfDay = new Date(y, (m ?? 1) - 1, d ?? 1, 0, 0, 0, 0);
+    const [ye, me, de] = end.split('-').map(Number);
+    const endOfDay = new Date(ye, (me ?? 1) - 1, de ?? 1, 23, 59, 59, 999);
+    if (Number.isNaN(startOfDay.getTime()) || Number.isNaN(endOfDay.getTime())) {
+      return res.status(400).json({ error: 'Invalid date format' });
+    }
+
+    const sales = await prisma.saleTransaction.findMany({
+      where: { createdAt: { gte: startOfDay, lte: endOfDay } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const isSingleDay = start === end;
+
+    if (isSingleDay) {
+      const byHour = new Map<number, { revenue: number; orders: number }>();
+      for (let h = 0; h < 24; h++) byHour.set(h, { revenue: 0, orders: 0 });
+      for (const s of sales) {
+        const hour = new Date(s.createdAt).getHours();
+        const cur = byHour.get(hour)!;
+        cur.revenue += s.total;
+        cur.orders += 1;
+      }
+      const data = Array.from({ length: 24 }, (_, h) => {
+        const cell = byHour.get(h)!;
+        return {
+          hour: `${String(h).padStart(2, '0')}:00`,
+          revenue: Math.round(cell.revenue * 100) / 100,
+          orders: cell.orders,
+        };
+      });
+      return res.json({ data, mode: 'hourly' });
+    }
+
+    function toLocalDateStr(d: Date): string {
+      const y = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${mo}-${day}`;
+    }
+    const byDay = new Map<string, { revenue: number; orders: number }>();
+    for (const s of sales) {
+      const key = toLocalDateStr(new Date(s.createdAt));
+      const cur = byDay.get(key) ?? { revenue: 0, orders: 0 };
+      cur.revenue += s.total;
+      cur.orders += 1;
+      byDay.set(key, cur);
+    }
+    const days: Array<{ date: string; revenue: number; orders: number }> = [];
+    const walk = new Date(startOfDay);
+    while (walk <= endOfDay) {
+      const dateStr = toLocalDateStr(walk);
+      const cell = byDay.get(dateStr) ?? { revenue: 0, orders: 0 };
+      days.push({
+        date: dateStr,
+        revenue: Math.round(cell.revenue * 100) / 100,
+        orders: cell.orders,
+      });
+      walk.setDate(walk.getDate() + 1);
+    }
+    res.json({ data: days, mode: 'daily' });
+  } catch (e) {
+    console.error('[reports/sales-chart]', e);
+    next(e);
+  }
+});
+
 /** Revenue by product category for "Sales by Category" pie chart. */
-router.get('/sales-by-category', async (req, res, next) => {
+router.get('/sales-by-category', REPORT_ROLES, async (req, res, next) => {
   try {
     const start = req.query.startDate as string;
     const end = req.query.endDate as string;

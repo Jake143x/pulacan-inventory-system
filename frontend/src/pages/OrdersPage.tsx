@@ -40,6 +40,13 @@ export default function OrdersPage() {
   const addToCart = (p: Product, qty: number = 1) => {
     const inv = (p as Product & { inventory?: { quantity: number } }).inventory;
     const max = inv?.quantity ?? 0;
+    const minQ = (p as Product).minOrderQuantity ?? 0;
+    const step = (p as Product).quantityStep ?? 1;
+    if ((p as Product).allowCustomQuantity && step > 0) {
+      const remainder = Math.abs((qty / step) - Math.round(qty / step));
+      if (remainder > 0.001) return;
+    }
+    if (qty < minQ) return;
     if (max < qty) return;
     setCart((c) => {
       const existing = c.find((x) => x.product.id === p.id);
@@ -132,6 +139,22 @@ export default function OrdersPage() {
               {productList.map((p) => {
                 const inv = (p as Product & { inventory?: { quantity: number } }).inventory;
                 const stock = inv?.quantity ?? 0;
+                const allowCustom = (p as Product).allowCustomQuantity;
+                const unit = (p as Product).saleUnit || 'piece';
+                const minQ = (p as Product).minOrderQuantity ?? 0;
+                const step = (p as Product).quantityStep ?? 0.5;
+                if (allowCustom) {
+                  return (
+                    <div key={p.id} className="p-2 bg-neutral-800 border border-neutral-600 rounded-lg flex flex-col gap-1">
+                      <span className="text-sm text-neutral-200">{p.name} · ₱{p.unitPrice.toFixed(2)}/{unit} ({stock})</span>
+                      <div className="flex gap-1 items-center">
+                        <input type="number" min={minQ} step={step} defaultValue={minQ || step} className="w-16 py-1 px-2 rounded border border-neutral-600 bg-neutral-900 text-neutral-200 text-sm" id={`qty-${p.id}`} />
+                        <span className="text-xs text-neutral-500">{unit}</span>
+                        <button type="button" onClick={() => { const el = document.getElementById(`qty-${p.id}`) as HTMLInputElement; const n = Number(el?.value); if (Number.isFinite(n) && n > 0) addToCart(p, n); }} disabled={stock === 0} className="py-1 px-2 text-sm bg-[#2563EB] text-white rounded hover:bg-[#1D4ED8] disabled:opacity-50">Add</button>
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <button key={p.id} type="button" onClick={() => addToCart(p)} disabled={stock === 0} className="p-2 bg-neutral-800 border border-neutral-600 rounded-lg text-left text-sm text-neutral-200 hover:bg-neutral-700 disabled:opacity-50">
                     {p.name} · ₱{p.unitPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 })} ({stock})
@@ -139,7 +162,7 @@ export default function OrdersPage() {
                 );
               })}
             </div>
-            <p className="text-sm text-neutral-400 mb-2">Cart: {cart.map((i) => `${i.product.name}×${i.quantity}`).join(', ') || 'Empty'}</p>
+            <p className="text-sm text-neutral-400 mb-2">Cart: {cart.map((i) => `${i.product.name}×${i.quantity % 1 === 0 ? i.quantity : i.quantity.toFixed(2)}`).join(', ') || 'Empty'}</p>
             <p className="text-sm text-neutral-400 mb-4">Order will be Pending until staff approves. Stock is not deducted until approval.</p>
             <div className="flex gap-2">
               <button type="button" onClick={placeOrder} disabled={cart.length === 0 || placing} className="px-4 py-2 bg-[#2563EB] text-white rounded-lg hover:bg-[#1D4ED8] disabled:opacity-50 btn-3d">Place order</button>

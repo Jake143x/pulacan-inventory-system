@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { products } from '../api/client';
 import type { Product } from '../api/client';
-import { resolveImageUrl } from '../api/client';
+import { resolveImageUrl, getProductUnitType } from '../api/client';
 import { useCart } from '../context/CartContext';
 import ProductImagePlaceholder from '../components/ProductImagePlaceholder';
 
@@ -16,6 +16,7 @@ export default function ProductDetail() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+  const [selectedUnitName, setSelectedUnitName] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('description');
 
@@ -26,22 +27,46 @@ export default function ProductDetail() {
       return;
     }
     setLoading(true);
-    products.get(numId).then(setProduct).catch(() => setProduct(null)).finally(() => setLoading(false));
+    products.get(numId).then((p) => {
+      setProduct(p);
+      if (p?.productUnits?.length) setSelectedUnitName(p.productUnits[0].unitName);
+      else setSelectedUnitName(null);
+    }).catch(() => setProduct(null)).finally(() => setLoading(false));
   }, [id]);
 
-  const stock = product?.inventory?.quantity ?? 0;
+  const hasUnits = product?.productUnits && product.productUnits.length > 0;
+  const selectedUnit = hasUnits && selectedUnitName
+    ? product!.productUnits!.find((u) => u.unitName.toLowerCase() === selectedUnitName.toLowerCase())
+    : null;
+  const stock = selectedUnit ? selectedUnit.stock : (product?.inventory?.quantity ?? 0);
   const outOfStock = stock === 0;
   const maxQty = Math.max(0, stock);
+  const pricePerUnit = selectedUnit ? selectedUnit.price : (product?.unitPrice ?? 0);
+  const isDecimalUnit = selectedUnitName ? /^(kg|meter|liter|kilo|metre|litre)$/i.test(selectedUnitName) : (getProductUnitType(product) === 'kg' || getProductUnitType(product) === 'meter');
+  const allowCustom = hasUnits ? isDecimalUnit : (getProductUnitType(product) === 'kg' || getProductUnitType(product) === 'meter');
+  const uType = selectedUnitName || getProductUnitType(product);
+  const minQ = isDecimalUnit ? 0.01 : 1;
+  const step = isDecimalUnit ? 0.01 : 1;
   const imageUrl = product?.imageUrl;
 
   useEffect(() => {
-    if (product && quantity > maxQty) setQuantity(Math.max(1, maxQty));
-  }, [product, maxQty, quantity]);
+    if (product && quantity > maxQty) setQuantity(allowCustom ? Math.max(minQ, maxQty) : Math.max(1, maxQty));
+  }, [product, maxQty, quantity, allowCustom, minQ]);
+
+  useEffect(() => {
+    if (product && allowCustom && selectedUnit) setQuantity(minQ);
+  }, [product?.id, allowCustom, minQ, selectedUnitName]);
 
   const handleAddToCart = () => {
     if (!product || outOfStock) return;
-    const qty = Math.min(Math.max(1, quantity), maxQty);
-    for (let i = 0; i < qty; i++) addItem(product.id, { maxQuantity: maxQty });
+    const qty = allowCustom
+      ? Math.min(Math.max(minQ, quantity), maxQty)
+      : Math.min(Math.max(1, quantity), maxQty);
+    addItem(product.id, {
+      maxQuantity: maxQty,
+      quantity: qty,
+      ...(hasUnits && selectedUnitName && { unitName: selectedUnitName, pricePerUnit: pricePerUnit }),
+    });
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   };
@@ -101,12 +126,51 @@ export default function ProductDetail() {
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 leading-tight mb-3">
             {product.name}
           </h1>
-          <p className="text-2xl md:text-3xl font-bold text-[var(--customer-primary)] tabular-nums mb-2">
-            {CURRENCY}{product.unitPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-          </p>
-          <p className={`text-sm ${outOfStock ? 'text-red-600' : 'text-slate-600'}`}>
-            Stock: {outOfStock ? 'Out of stock' : `${stock} available`}
-          </p>
+          {hasUnits ? (
+            <>
+              <p className="text-sm font-medium text-slate-700 mb-2">Purchase Unit</p>
+              <div className="flex flex-wrap gap-3 mb-3">
+                {product.productUnits!.map((u) => (
+                  <label key={u.id} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="purchaseUnit"
+                      checked={(selectedUnitName ?? '') === u.unitName}
+                      onChange={() => {
+                        setSelectedUnitName(u.unitName);
+                        const isDec = /^(kg|meter|liter|kilo|metre|litre)$/i.test(u.unitName);
+                        setQuantity(isDec ? 0.01 : 1);
+                      }}
+                      className="text-[var(--customer-primary)] focus:ring-[var(--customer-primary)]"
+                    />
+                    <span className="font-medium text-slate-900">{u.unitName}</span>
+                    <span className="tabular-nums text-slate-600">₱{u.price.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-xs text-slate-500">({u.stock} in stock)</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-2xl md:text-3xl font-bold text-[var(--customer-primary)] tabular-nums mb-2">
+                {selectedUnit ? `${CURRENCY}${selectedUnit.price.toLocaleString('en-PH', { minimumFractionDigits: 2 })} per ${selectedUnit.unitName}` : ''}
+              </p>
+              <p className={`text-sm ${outOfStock ? 'text-red-600' : 'text-slate-600'}`}>
+                Stock: {outOfStock ? 'Out of stock' : `${typeof stock === 'number' && stock % 1 !== 0 ? stock.toFixed(2) : stock} ${selectedUnitName ?? ''} available`}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-2xl md:text-3xl font-bold text-[var(--customer-primary)] tabular-nums mb-2">
+                {uType === 'piece' ? CURRENCY + product.unitPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 }) : `${CURRENCY}${product.unitPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 })} per ${uType}`}
+              </p>
+              <p className={`text-sm ${outOfStock ? 'text-red-600' : 'text-slate-600'}`}>
+                Stock: {outOfStock ? 'Out of stock' : `${typeof stock === 'number' && stock % 1 !== 0 ? stock.toFixed(2) : stock} ${uType} available`}
+              </p>
+              {allowCustom && (
+                <p className="text-sm text-slate-600 mt-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  <span className="font-medium text-slate-700">Custom quantity:</span> {uType === 'kg' ? 'Enter weight in kg (e.g. 1.5, 2.75).' : 'Enter length in meters (e.g. 0.5, 3.25).'}
+                </p>
+              )}
+            </>
+          )}
 
           <div className="border-t border-slate-200 my-6" />
 
@@ -119,31 +183,54 @@ export default function ProductDetail() {
             <p className="text-xs text-slate-500 mb-6">SKU: {product.sku}</p>
           )}
 
-          {/* Quantity: plus/minus style buttons */}
+          {/* Quantity: decimal for kg/meter/liter, plus/minus for piece/bag/box/sheet/roll */}
           <div className="flex flex-wrap items-center gap-3 mb-6">
-            <span className="text-sm font-medium text-slate-700">Qty:</span>
-            <div className="flex items-center rounded-xl border border-slate-200 overflow-hidden bg-white">
-              <button
-                type="button"
-                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                disabled={quantity <= 1 || outOfStock}
-                className="w-12 h-12 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                −
-              </button>
-              <span className="w-14 text-center text-base font-semibold text-slate-900 tabular-nums">
-                {quantity}
-              </span>
-              <button
-                type="button"
-                onClick={() => setQuantity((q) => Math.min(maxQty, q + 1))}
-                disabled={quantity >= maxQty || outOfStock}
-                className="w-12 h-12 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                +
-              </button>
-            </div>
+            <span className="text-sm font-medium text-slate-700">
+              {allowCustom ? (selectedUnitName?.toLowerCase() === 'kg' ? 'Quantity (kg):' : selectedUnitName?.toLowerCase() === 'meter' ? 'Length (meter):' : 'Quantity:') : 'Qty:'}
+            </span>
+            {allowCustom ? (
+              <input
+                type="number"
+                min={minQ}
+                step={step}
+                max={maxQty}
+                value={quantity}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '') return;
+                  const n = Number(v);
+                  if (!Number.isNaN(n)) setQuantity(n);
+                }}
+                className="w-28 py-2.5 px-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-base font-semibold tabular-nums focus:ring-2 focus:ring-[var(--customer-primary)]/20 focus:border-[var(--customer-primary)]"
+              />
+            ) : (
+              <div className="flex items-center rounded-xl border border-slate-200 overflow-hidden bg-white">
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  disabled={quantity <= 1 || outOfStock}
+                  className="w-12 h-12 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  −
+                </button>
+                <span className="w-14 text-center text-base font-semibold text-slate-900 tabular-nums">
+                  {quantity}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.min(maxQty, q + 1))}
+                  disabled={quantity >= maxQty || outOfStock}
+                  className="w-12 h-12 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  +
+                </button>
+              </div>
+            )}
           </div>
+
+          <p className="text-lg font-semibold text-slate-900 mb-6">
+            Total: {CURRENCY}{(quantity * pricePerUnit).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+          </p>
 
           {/* Action buttons — clear spacing */}
           <div className="flex flex-col gap-3">
@@ -201,11 +288,15 @@ export default function ProductDetail() {
               </div>
               <div className="flex gap-4">
                 <dt className="text-slate-500 w-32 shrink-0">Price</dt>
-                <dd className="text-slate-900 font-semibold">{CURRENCY}{product.unitPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</dd>
+                <dd className="text-slate-900 font-semibold">
+                  {hasUnits && product.productUnits?.length
+                    ? `From ${CURRENCY}${Math.min(...product.productUnits.map((u) => u.price)).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`
+                    : `${CURRENCY}${product.unitPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
+                </dd>
               </div>
               <div className="flex gap-4">
                 <dt className="text-slate-500 w-32 shrink-0">Stock</dt>
-                <dd className="text-slate-900">{stock} available</dd>
+                <dd className="text-slate-900">{stock} {hasUnits && selectedUnitName ? selectedUnitName : uType} available</dd>
               </div>
             </dl>
           )}

@@ -17,6 +17,10 @@ import ChangePasswordPage from './pages/ChangePasswordPage';
 import NotificationsPage from './pages/NotificationsPage';
 import ProfilePage from './pages/ProfilePage';
 import SalesChartFullPage from './pages/SalesChartFullPage';
+import MonitorPage from './pages/MonitorPage';
+import FullscreenMonitorPage from './pages/FullscreenMonitorPage';
+import StoreAnalyticsMonitorPage from './pages/StoreAnalyticsMonitorPage';
+import LiveChatPage from './pages/LiveChatPage';
 
 const CUSTOMER_WEB_PORTAL_URL = 'http://localhost:5174';
 
@@ -27,13 +31,14 @@ function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles?
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'CUSTOMER') {
+    // Send customers straight to the Customer Web Portal instead of showing a modal
+    window.location.href = CUSTOMER_WEB_PORTAL_URL;
     return (
       <div className="min-h-screen flex items-center justify-center p-4 admin-canvas">
         <div className="card-3d rounded-xl p-8 max-w-md text-center" style={{ backgroundColor: 'var(--admin-card)', borderColor: 'var(--admin-border)' }}>
           <h1 className="text-xl font-bold text-white mb-2">Customer account</h1>
-          <p className="text-gray-400 mb-4">You are logged in as <strong>Customer</strong>. Use the Customer Web Portal to browse and place orders.</p>
-          <a href={CUSTOMER_WEB_PORTAL_URL} className="inline-block px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200">Open Customer Web Portal</a>
-          <p className="text-sm text-gray-500 mt-4">{CUSTOMER_WEB_PORTAL_URL}</p>
+          <p className="text-gray-400 mb-4">Redirecting you to the Customer Web Portal…</p>
+          <p className="text-sm text-gray-500">If nothing happens, <a href={CUSTOMER_WEB_PORTAL_URL} className="text-blue-400 underline">open it here</a>.</p>
         </div>
       </div>
     );
@@ -61,6 +66,9 @@ export default function App() {
       <Route path="/register" element={<Navigate to="/login" replace />} />
       <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
       <Route path="/dashboard/sales-chart" element={<ProtectedRoute roles={['ADMIN', 'OWNER']}><SalesChartFullPage /></ProtectedRoute>} />
+      <Route path="/monitor" element={<ProtectedRoute roles={['ADMIN', 'OWNER']}><MonitorPage /></ProtectedRoute>} />
+      <Route path="/fullscreen-monitor" element={<ProtectedRoute roles={['ADMIN', 'OWNER']}><FullscreenMonitorPage /></ProtectedRoute>} />
+      <Route path="/store-analytics-monitor" element={<ProtectedRoute roles={['ADMIN', 'OWNER']}><StoreAnalyticsMonitorPage /></ProtectedRoute>} />
       <Route
         path="/"
         element={
@@ -76,6 +84,7 @@ export default function App() {
         <Route path="pos" element={<ProtectedRoute roles={['CASHIER']}><POSPage /></ProtectedRoute>} />
         <Route path="orders" element={<OrdersPage />} />
         <Route path="orders/approval" element={<ProtectedRoute roles={['CASHIER']}><OrderApprovalPage /></ProtectedRoute>} />
+        <Route path="live-chat" element={<ProtectedRoute roles={['CASHIER', 'ADMIN', 'OWNER']}><LiveChatPage /></ProtectedRoute>} />
         <Route path="analytics" element={<ProtectedRoute roles={['ADMIN', 'OWNER']}><AnalyticsPage /></ProtectedRoute>} />
         <Route path="ai" element={<AIPage />} />
         <Route path="config" element={<ProtectedRoute roles={['ADMIN', 'OWNER']}><ConfigPage /></ProtectedRoute>} />

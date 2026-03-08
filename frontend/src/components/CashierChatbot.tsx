@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { ai } from '../api/client';
+import { Link } from 'react-router-dom';
+import { ai, chat } from '../api/client';
 
 type Message = { role: 'user' | 'assistant'; text: string };
 
@@ -15,11 +16,23 @@ export default function CashierChatbot() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [openChatCount, setOpenChatCount] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages]);
+
+  // Poll for open live chat sessions so cashier sees "customer waiting" notification
+  useEffect(() => {
+    if (!open) return;
+    const fetch = () => {
+      chat.listSessions({ status: 'open' }).then((r) => setOpenChatCount(r.data?.length ?? 0)).catch(() => setOpenChatCount(0));
+    };
+    fetch();
+    const t = setInterval(fetch, 10000);
+    return () => clearInterval(t);
+  }, [open]);
 
   const send = async (text: string) => {
     const msg = text.trim();
@@ -76,7 +89,20 @@ export default function CashierChatbot() {
           </div>
 
           <div ref={listRef} className="flex-1 overflow-y-auto min-h-0 p-3 space-y-2" style={{ minHeight: '120px' }}>
-            {messages.length === 0 && (
+            {openChatCount > 0 && (
+              <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm" style={{ color: 'var(--admin-text)' }}>
+                <p className="font-medium text-amber-400">Customer waiting</p>
+                <p className="text-xs mt-0.5 text-slate-400">You have {openChatCount} customer{openChatCount !== 1 ? 's' : ''} in Live chat.</p>
+                <Link
+                  to="/live-chat"
+                  className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-[#2563EB] hover:underline"
+                >
+                  Open Live chat
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </Link>
+              </div>
+            )}
+            {messages.length === 0 && !openChatCount && (
               <p className="text-xs text-slate-500">Ask for stock, price, or quick help.</p>
             )}
             {messages.map((m, i) => (

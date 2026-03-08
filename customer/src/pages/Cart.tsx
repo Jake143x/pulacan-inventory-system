@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { products, orders, publicConfig } from '../api/client';
 import type { Product } from '../api/client';
-import { resolveImageUrl } from '../api/client';
+import { resolveImageUrl, getProductUnitType } from '../api/client';
 import { useCart } from '../context/CartContext';
 import ProductImagePlaceholder from '../components/ProductImagePlaceholder';
 
@@ -87,25 +87,31 @@ export default function Cart() {
   const cart = cartItems
     .map((item) => {
       const product = productList.find((p) => p.id === item.productId);
-      return product ? { product, quantity: item.quantity } : null;
+      return product ? { product, quantity: item.quantity, unitName: item.unitName, pricePerUnit: item.pricePerUnit } : null;
     })
-    .filter((x): x is { product: Product; quantity: number } => x != null);
+    .filter((x): x is { product: Product; quantity: number; unitName?: string; pricePerUnit?: number } => x != null);
 
-  const updateQtyWithCap = (productId: number, delta: number) => {
-    const product = productList.find((p) => p.id === productId);
-    const inv = product && (product as Product & { inventory?: { quantity: number } }).inventory;
-    const max = inv?.quantity ?? 9999;
-    const item = cartItems.find((x) => x.productId === productId);
+  const updateQtyWithCap = (productId: number, delta: number, unitName: string | undefined, product?: Product) => {
+    const p = product ?? productList.find((x) => x.id === productId);
+    const max = p?.productUnits?.length
+      ? (unitName ? (p.productUnits.find((u) => u.unitName.toLowerCase() === (unitName ?? '').toLowerCase())?.stock ?? 0) : p.inventory?.quantity ?? 0)
+      : (p && (p as Product & { inventory?: { quantity: number } }).inventory?.quantity) ?? 9999;
+    const item = cartItems.find((x) => x.productId === productId && (x.unitName ?? '') === (unitName ?? ''));
     if (!item) return;
+    const isDecimalUnit = unitName && /^(kg|meter|liter|kilo|metre|litre)$/i.test(unitName);
+    const step = isDecimalUnit ? 0.01 : 1;
+    const deltaAmount = delta >= 0 ? step : -step;
     if (delta > 0) {
-      const newQty = Math.min(item.quantity + delta, max);
-      setQuantity(productId, newQty);
+      const newQty = Math.min(item.quantity + deltaAmount, max);
+      setQuantity(productId, newQty, unitName);
     } else {
-      updateQty(productId, delta);
+      const newQty = item.quantity + deltaAmount;
+      if (newQty <= 0) remove(productId, unitName);
+      else setQuantity(productId, newQty, unitName);
     }
   };
 
-  const subtotal = cart.reduce((s, i) => s + i.product.unitPrice * i.quantity, 0);
+  const subtotal = cart.reduce((s, i) => s + (i.pricePerUnit ?? i.product.unitPrice) * i.quantity, 0);
   const shipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE;
   const total = subtotal + shipping + TAX;
   const itemCount = cart.reduce((sum, i) => sum + i.quantity, 0);
@@ -169,7 +175,11 @@ export default function Cart() {
     setSuccess('');
     try {
       await orders.create(
-        cart.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
+        cart.map((i) => ({
+          productId: i.product.id,
+          quantity: i.quantity,
+          ...(i.unitName != null && i.unitName !== '' && { unitName: i.unitName }),
+        })),
         paymentMethod,
         {
           streetAddress: street,
@@ -245,13 +255,27 @@ export default function Cart() {
             <div className="lg:w-[70%] space-y-0">
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 {cart.map((i, index) => {
-                  const stock = (i.product as Product & { inventory?: { quantity: number } }).inventory?.quantity ?? 0;
+                  const hasUnits = i.product.productUnits && i.product.productUnits.length > 0;
+                  const stock = hasUnits && i.unitName
+                    ? (i.product.productUnits!.find((u) => u.unitName.toLowerCase() === i.unitName!.toLowerCase())?.stock ?? 0)
+                    : (i.product as Product & { inventory?: { quantity: number } }).inventory?.quantity ?? 0;
                   const lowStock = stock > 0 && stock <= LOW_STOCK_THRESHOLD;
                   const shortDesc = i.product.description
                     ? (i.product.description.slice(0, 60) + (i.product.description.length > 60 ? '…' : ''))
                     : '';
+                  const unitName = i.unitName ?? '';
+                  const isDecimalUnit = unitName && /^(kg|meter|liter|kilo|metre|litre)$/i.test(unitName);
+                  const allowCustom = hasUnits ? isDecimalUnit : (getProductUnitType(i.product) === 'kg' || getProductUnitType(i.product) === 'meter');
+                  const unit = hasUnits ? unitName || 'piece' : getProductUnitType(i.product);
+                  const unitLabel = unit === 'kg' ? 'kg' : unit === 'meter' ? 'm' : unit || 'piece';
+                  const pricePerUnit = i.pricePerUnit ?? i.product.unitPrice;
+                  const minQ = isDecimalUnit ? 0 : 1;
+                  const step = isDecimalUnit ? 0.01 : 1;
+                  const qtyDisplay = i.quantity % 1 === 0 ? i.quantity : i.quantity.toFixed(2);
+                  const plural = unitLabel === 'piece' || unitLabel === 'pcs' ? 'pieces' : unitLabel === 'kg' ? 'kg' : unitLabel === 'm' ? 'meters' : unitLabel;
+                  const unitLine = `${qtyDisplay} ${plural} × ${CURRENCY}${pricePerUnit.toLocaleString('en-PH', { minimumFractionDigits: 2 })} = ${CURRENCY}${(pricePerUnit * i.quantity).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
                   return (
-                    <div key={i.product.id}>
+                    <div key={`${i.product.id}:${unitName}`}>
                       {index > 0 && <div className="border-t border-slate-200" />}
                       <div className="p-5 flex flex-col sm:flex-row sm:items-center gap-4">
                         <Link to={`/product/${i.product.id}`} className="shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center">
@@ -267,36 +291,84 @@ export default function Cart() {
                           </Link>
                           {shortDesc && <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">{shortDesc}</p>}
                           <p className="text-sm font-medium text-slate-700 mt-1 tabular-nums">
-                            {CURRENCY}{i.product.unitPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                            {CURRENCY}{pricePerUnit.toLocaleString('en-PH', { minimumFractionDigits: 2 })}{unitLabel ? ` per ${unitLabel}` : ''}
                           </p>
+                          <p className="text-sm font-semibold text-slate-800 mt-0.5 tabular-nums">
+                            {unitLine}
+                          </p>
+                          {allowCustom && (
+                            <p className="text-xs text-slate-600 mt-0.5">Change amount below</p>
+                          )}
                           {lowStock && (
                             <p className="text-xs text-amber-600 font-medium mt-1">Only {stock} left in stock</p>
                           )}
                         </div>
-                        <div className="flex items-center justify-between sm:justify-end gap-4">
-                          <div className="flex items-center rounded-xl border border-slate-200 overflow-hidden bg-white">
-                            <button
-                              type="button"
-                              onClick={() => updateQtyWithCap(i.product.id, -1)}
-                              className="w-10 h-10 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
-                            >
-                              −
-                            </button>
-                            <span className="w-10 text-center text-sm font-semibold text-slate-900 tabular-nums">{i.quantity}</span>
-                            <button
-                              type="button"
-                              onClick={() => updateQtyWithCap(i.product.id, 1)}
-                              className="w-10 h-10 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
-                            >
-                              +
-                            </button>
+                        <div className="flex items-center justify-between sm:justify-end gap-4 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            {allowCustom ? (
+                              <>
+                                <label className="text-xs text-slate-600 whitespace-nowrap">Qty:</label>
+                                <input
+                                  type="number"
+                                  min={minQ}
+                                  step={step}
+                                  max={stock}
+                                  value={i.quantity}
+                                  onChange={(e) => {
+                                    const v = Number(e.target.value);
+                                    if (!Number.isFinite(v)) return;
+                                    if (v >= minQ) setQuantity(i.product.id, Math.min(v, stock), i.unitName);
+                                    else if (v >= 0) setQuantity(i.product.id, minQ > 0 ? minQ : step, i.unitName);
+                                  }}
+                                  className="w-20 py-2 px-2 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm font-semibold tabular-nums text-center focus:ring-2 focus:ring-[var(--customer-primary)]/20 focus:border-[var(--customer-primary)]"
+                                />
+                                <div className="flex items-center rounded-xl border border-slate-200 overflow-hidden bg-white">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateQtyWithCap(i.product.id, -1, i.unitName, i.product)}
+                                    className="w-9 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                                  >
+                                    −
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateQtyWithCap(i.product.id, 1, i.unitName, i.product)}
+                                    className="w-9 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex items-center rounded-xl border border-slate-200 overflow-hidden bg-white">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateQtyWithCap(i.product.id, -1, i.unitName, i.product)}
+                                    className="w-10 h-10 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                                  >
+                                    −
+                                  </button>
+                                  <span className="w-10 text-center text-sm font-semibold text-slate-900 tabular-nums">
+                                    {i.quantity % 1 === 0 ? i.quantity : i.quantity.toFixed(2)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateQtyWithCap(i.product.id, 1, i.unitName, i.product)}
+                                    className="w-10 h-10 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
                           <p className="font-semibold text-slate-900 tabular-nums w-24 text-right">
-                            {CURRENCY}{(i.product.unitPrice * i.quantity).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                            {CURRENCY}{(pricePerUnit * i.quantity).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                           </p>
                           <button
                             type="button"
-                            onClick={() => remove(i.product.id)}
+                            onClick={() => remove(i.product.id, i.unitName)}
                             className="text-sm text-red-600 hover:text-red-700 font-medium shrink-0"
                           >
                             Remove

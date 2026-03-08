@@ -10,13 +10,15 @@
     "setup": "cd backend && npx prisma generate && npx prisma db push && npm run seed",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "dev": "npx concurrently -n backend,staff,customer -c blue,green,magenta \"npm run dev:backend\" \"npm run dev:staff\" \"npm run dev:customer\"",
+    "dev": "npx concurrently -n backend,staff,customer,ai -c blue,green,magenta,cyan \"npm run dev:backend\" \"npm run dev:staff\" \"npm run dev:customer\" \"npm run dev:ai\"",
     "dev:backend": "cd backend && npm run dev",
     "dev:staff": "cd frontend && npm run dev",
     "dev:customer": "cd customer && npm run dev",
+    "dev:ai": "node scripts/kill-port-8000.js && node scripts/start-ai.js",
     "start": "cd backend && npx prisma migrate deploy && node dist/index.js"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "kill-port": "^1.0.1"
   }
 }

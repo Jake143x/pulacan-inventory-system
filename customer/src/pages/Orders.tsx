@@ -69,14 +69,15 @@ export default function Orders() {
   return (
     <div className="w-full max-w-[90rem] mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">My Orders</h1>
-          <p className="mt-1 text-sm text-slate-600">View and filter your order history</p>
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: 'var(--customer-text)' }}>My Orders</h1>
+          <p className="mt-1 text-sm" style={{ color: 'var(--customer-text-muted)' }}>View and filter your order history</p>
         </div>
         <select
           value={statusFilter}
           onChange={(e) => handleFilterChange(e.target.value)}
-          className="h-12 px-4 rounded-xl border border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[var(--customer-primary)]/30 min-w-[200px]"
+          className="w-full sm:w-auto sm:min-w-[200px] h-11 sm:h-12 px-4 rounded-xl border bg-white focus:ring-2 focus:ring-[var(--customer-primary)]/30 transition-colors"
+          style={{ borderColor: 'var(--customer-border)', color: 'var(--customer-text)' }}
         >
           <option value="">All statuses</option>
           <option value="PENDING_APPROVAL">Pending Payment</option>
@@ -86,43 +87,43 @@ export default function Orders() {
       </div>
 
       {loading ? (
-        <div className="py-24 flex flex-col items-center justify-center gap-3">
-          <div className="w-10 h-10 rounded-full border-2 border-slate-200 border-t-[var(--customer-primary)] animate-spin" />
-          <span className="text-sm text-slate-500">Loading orders...</span>
+        <div className="py-16 sm:py-24 flex flex-col items-center justify-center gap-3">
+          <div className="w-10 h-10 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--customer-border)', borderTopColor: 'var(--customer-primary)' }} />
+          <span className="text-sm" style={{ color: 'var(--customer-text-muted)' }}>Loading orders...</span>
         </div>
       ) : list.length === 0 ? (
-        <div className="rounded-2xl bg-white border border-slate-200 p-12 text-center shadow-md">
-          <p className="text-slate-700 font-medium">No orders yet</p>
-          <p className="mt-1 text-sm text-slate-500">When you place an order, it will appear here.</p>
+        <div className="rounded-2xl border p-8 sm:p-12 text-center shadow-md content-card">
+          <p className="font-medium" style={{ color: 'var(--customer-text)' }}>No orders yet</p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--customer-text-muted)' }}>When you place an order, it will appear here.</p>
         </div>
       ) : (
         <>
-          <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-md">
+          <div className="rounded-2xl border overflow-hidden shadow-md content-card">
             <div className="overflow-x-auto">
               <table className="w-full text-left min-w-[560px]">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/80">
-                    <th className="px-5 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Order</th>
-                    <th className="px-5 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
-                    <th className="px-5 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Payment</th>
-                    <th className="px-5 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Total</th>
-                    <th className="px-5 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Date</th>
-                    <th className="px-5 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">Actions</th>
+                  <tr className="border-b bg-slate-50/80" style={{ borderColor: 'var(--customer-border)' }}>
+                    <th className="px-4 sm:px-5 py-3 sm:py-4 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--customer-text-muted)' }}>Order</th>
+                    <th className="px-4 sm:px-5 py-3 sm:py-4 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--customer-text-muted)' }}>Status</th>
+                    <th className="px-4 sm:px-5 py-3 sm:py-4 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--customer-text-muted)' }}>Payment</th>
+                    <th className="px-4 sm:px-5 py-3 sm:py-4 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--customer-text-muted)' }}>Total</th>
+                    <th className="px-4 sm:px-5 py-3 sm:py-4 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell" style={{ color: 'var(--customer-text-muted)' }}>Date</th>
+                    <th className="px-4 sm:px-5 py-3 sm:py-4 text-xs font-semibold uppercase tracking-wider text-right" style={{ color: 'var(--customer-text-muted)' }}>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y" style={{ borderColor: 'var(--customer-border)' }}>
                   {list.map((o) => (
                     <tr key={o.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-5 py-4 font-semibold text-slate-900">#{o.id}</td>
-                      <td className="px-5 py-4">
+                      <td className="px-4 sm:px-5 py-3 sm:py-4 font-semibold" style={{ color: 'var(--customer-text)' }}>#{o.id}</td>
+                      <td className="px-4 sm:px-5 py-3 sm:py-4">
                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${statusStyle(o.status)}`}>
                           {statusDisplay(o.status)}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-sm text-slate-600">{paymentLabel(o.paymentMethod)}</td>
-                      <td className="px-5 py-4 font-semibold text-slate-900 tabular-nums">{CURRENCY}{o.total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                      <td className="px-5 py-4 text-sm text-slate-500">{new Date(o.createdAt).toLocaleString()}</td>
-                      <td className="px-5 py-4 text-right">
+                      <td className="px-4 sm:px-5 py-3 sm:py-4 text-sm" style={{ color: 'var(--customer-text-muted)' }}>{paymentLabel(o.paymentMethod)}</td>
+                      <td className="px-4 sm:px-5 py-3 sm:py-4 font-semibold tabular-nums" style={{ color: 'var(--customer-text)' }}>{CURRENCY}{o.total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                      <td className="px-4 sm:px-5 py-3 sm:py-4 text-sm hidden sm:table-cell" style={{ color: 'var(--customer-text-muted)' }}>{new Date(o.createdAt).toLocaleString()}</td>
+                      <td className="px-4 sm:px-5 py-3 sm:py-4 text-right">
                         <button
                           type="button"
                           onClick={() => handleDeleteOrder(o.id)}
@@ -138,21 +139,23 @@ export default function Orders() {
             </div>
           </div>
           {pages > 1 && (
-            <div className="flex items-center justify-center gap-4">
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
               <button
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
-                className="px-4 py-2 rounded-xl text-sm font-medium border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 rounded-xl text-sm font-medium border bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                style={{ borderColor: 'var(--customer-border)', color: 'var(--customer-text)' }}
               >
                 « Previous
               </button>
-              <span className="text-sm text-slate-600">Page {page} of {pages}</span>
+              <span className="text-sm" style={{ color: 'var(--customer-text-muted)' }}>Page {page} of {pages}</span>
               <button
                 type="button"
                 disabled={page >= pages}
                 onClick={() => setPage((p) => p + 1)}
-                className="px-4 py-2 rounded-xl text-sm font-medium border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 rounded-xl text-sm font-medium border bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                style={{ borderColor: 'var(--customer-border)', color: 'var(--customer-text)' }}
               >
                 Next »
               </button>

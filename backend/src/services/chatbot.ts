@@ -2,6 +2,12 @@ import { getLatestPredictions } from './aiAnalytics.js';
 import { createNotificationForCashiers } from './notifications.js';
 import { prisma } from '../lib/prisma.js';
 
+/**
+ * AI chat assistant: reads automatically from the database on every request.
+ * No stored conversation or cached product list — each message triggers live
+ * queries (Product, Inventory, OnlineOrder, etc.) via Prisma.
+ */
+
 const CASHIER_CURRENCY = '₱';
 const CUSTOMER_CURRENCY = '₱';
 
@@ -23,6 +29,7 @@ type CustomerIntent =
   | 'order_status'
   | 'product_price'
   | 'product_stock'
+  | 'product_specs'
   | 'shipping_info'
   | 'payment_options'
   | 'customer_help'
@@ -47,11 +54,110 @@ function detectCustomerIntent(message: string): { intent: CustomerIntent; produc
   if (priceMatch) return { intent: 'product_price', productQuery: priceMatch[1].trim() };
   const stockMatch = lower.match(/(?:stock|availability|in stock|do you have)\s+(?:for\s+)?(.+)/);
   if (stockMatch) return { intent: 'product_stock', productQuery: stockMatch[1].trim() };
+  const specsMatch = lower.match(/(?:specs?|specification|details?|info(?:rmation)?)\s+(?:of|for|on)\s+(.+)/);
+  if (specsMatch) return { intent: 'product_specs', productQuery: specsMatch[1].trim() };
+  const giveSpecsMatch = lower.match(/give\s+me\s+(?:the\s+)?(?:specs?|details?)\s+(?:of|for)\s+(.+)/);
+  if (giveSpecsMatch) return { intent: 'product_specs', productQuery: giveSpecsMatch[1].trim() };
   if (/\bshipping\b|\bdelivery\b|\bdeliver\b/.test(lower)) return { intent: 'shipping_info' };
   if (/\bpayment\b|\bpay\b|\bgcash\b|\bcod\b|\bdebit\b/.test(lower)) return { intent: 'payment_options' };
   if (/\bhelp\b/.test(lower) || /\bwhat\s+can\s+you\b/.test(lower)) return { intent: 'customer_help' };
+  // "how about nails?", "what about cement?", "tell me about hammer" → treat as product lookup (no storage, live lookup only)
+  const aboutMatch = lower.match(/(?:how|what)\s+about\s+(.+)/);
+  if (aboutMatch) return { intent: 'product_price', productQuery: aboutMatch[1].trim() };
+  const tellMatch = lower.match(/(?:tell\s+me\s+about|info\s+on|information\s+about)\s+(.+)/);
+  if (tellMatch) return { intent: 'product_price', productQuery: tellMatch[1].trim() };
+  // Any short query (e.g. "cement", "nails", "lumber") → try product lookup from database
   if (trimmed.length > 0 && trimmed.length < 80) return { intent: 'product_price', productQuery: trimmed };
   return { intent: 'unknown' };
+}
+
+/** Normalize product search: strip punctuation and use best token for DB lookup. */
+function normalizeProductQuery(q: string): string[] {
+  const cleaned = q.replace(/[?!.,;:]$/g, '').trim();
+  if (!cleaned) return [];
+  const tokens = cleaned.split(/\s+/).filter((t) => t.length > 0);
+  if (tokens.length === 0) return [cleaned];
+  return [cleaned, ...tokens].filter((v, i, a) => a.indexOf(v) === i);
+}
+
+/** Product row with inventory for chatbot responses. */
+type ProductForChat = {
+  name: string;
+  description: string | null;
+  category: string | null;
+  unitPrice: number;
+  unitType: string;
+  saleUnit: string | null;
+  specifications: string | null;
+  inventory: { quantity: number } | null;
+};
+
+/** Search products by name (flexible ILIKE). Uses live DB so admin updates are reflected. */
+async function searchProductsByName(query: string, limit = 10): Promise<ProductForChat[]> {
+  const terms = normalizeProductQuery(query);
+  for (const term of terms) {
+    if (!term) continue;
+    const products = await prisma.product.findMany({
+      where: {
+        status: 'active',
+        name: { contains: term, mode: 'insensitive' },
+      },
+      select: {
+        name: true,
+        description: true,
+        category: true,
+        unitPrice: true,
+        unitType: true,
+        saleUnit: true,
+        specifications: true,
+        inventory: { select: { quantity: true } },
+      },
+      take: limit,
+      orderBy: { name: 'asc' },
+    });
+    if (products.length > 0) return products as ProductForChat[];
+  }
+  return [];
+}
+
+/** Get similar product names when exact match not found (e.g. by category or partial word). */
+async function getSimilarProductsForChat(query: string, limit = 5): Promise<string[]> {
+  const words = query.split(/\s+/).filter((w) => w.length > 1);
+  if (words.length === 0) {
+    const products = await prisma.product.findMany({
+      where: { status: 'active' },
+      select: { name: true },
+      take: limit,
+      orderBy: { name: 'asc' },
+    });
+    return products.map((p) => p.name);
+  }
+  const products = await prisma.product.findMany({
+    where: {
+      status: 'active',
+      OR: words.map((w) => ({ name: { contains: w, mode: 'insensitive' as const } })),
+    },
+    select: { name: true },
+    take: limit,
+    orderBy: { name: 'asc' },
+  });
+  return [...new Set(products.map((p) => p.name))];
+}
+
+/** Format a single product for chatbot: name, description, category, price, stock. */
+function formatProductDetails(p: ProductForChat, currency: string): string {
+  const lines: string[] = [p.name];
+  if (p.description?.trim()) lines.push(p.description.trim());
+  const specLabel = p.specifications?.trim() ? `Specs: ${p.specifications.trim()}` : null;
+  if (specLabel) lines.push(specLabel);
+  const unit = (p.saleUnit || p.unitType || 'piece').toLowerCase();
+  const unitLabel = unit === 'kg' ? 'kg' : unit === 'meter' ? 'm' : 'pcs';
+  const qty = p.inventory?.quantity ?? 0;
+  const stockLine = qty > 0 ? `${qty} ${unitLabel} in stock` : 'Out of stock';
+  lines.push(`Price: ${currency}${p.unitPrice.toFixed(2)}`);
+  lines.push(`Stock: ${stockLine}`);
+  if (p.category?.trim()) lines.push(`Category: ${p.category.trim()}`);
+  return lines.join('\n');
 }
 
 function detectCashierIntent(message: string): { intent: CashierIntent; productQuery?: string } {
@@ -88,30 +194,23 @@ export async function chat(userId: number, message: string, role: string): Promi
     const { intent: cashierIntent, productQuery } = detectCashierIntent(message);
 
     if (cashierIntent === 'stock_product' && productQuery) {
-      const products = await prisma.product.findMany({
-        where: { name: { contains: productQuery, mode: 'insensitive' } },
-        include: { inventory: true },
-        take: 5,
-      });
-      if (products.length === 0) return 'Product not found. Please check the name or try another search.';
-      const line = products
-        .map((p) => {
-          const qty = p.inventory?.quantity ?? 0;
-          const status = qty === 0 ? 'Out of Stock' : qty <= (p.inventory?.lowStockThreshold ?? 10) ? 'Low Stock' : 'In Stock';
-          return `${p.name} – ${qty} units available. Status: ${status}.`;
-        })
-        .join('\n');
-      return line;
+      const products = await searchProductsByName(productQuery, 5);
+      if (products.length === 0) {
+        const similar = await getSimilarProductsForChat(productQuery, 5);
+        const hint = similar.length > 0 ? ` You might mean: ${similar.join(', ')}.` : '';
+        return `Product not found. Please check the name or try another search.${hint}`;
+      }
+      return products.map((p) => formatProductDetails(p, CASHIER_CURRENCY)).join('\n\n');
     }
 
     if (cashierIntent === 'price_product' && productQuery) {
-      const products = await prisma.product.findMany({
-        where: { name: { contains: productQuery, mode: 'insensitive' } },
-        take: 5,
-      });
-      if (products.length === 0) return 'Product not found. Please check the name or try another search.';
-      const line = products.map((p) => `${p.name} – ${CASHIER_CURRENCY}${p.unitPrice.toFixed(2)}`).join('\n');
-      return line;
+      const products = await searchProductsByName(productQuery, 5);
+      if (products.length === 0) {
+        const similar = await getSimilarProductsForChat(productQuery, 5);
+        const hint = similar.length > 0 ? ` You might mean: ${similar.join(', ')}.` : '';
+        return `Product not found. Please check the name or try another search.${hint}`;
+      }
+      return products.map((p) => formatProductDetails(p, CASHIER_CURRENCY)).join('\n\n');
     }
 
     if (cashierIntent === 'add_item') {
@@ -133,20 +232,10 @@ export async function chat(userId: number, message: string, role: string): Promi
     // Fallback: try product lookup by full message (e.g. "Hammer" → stock)
     const trimmed = message.trim();
     if (trimmed.length > 0 && trimmed.length < 80) {
-      const products = await prisma.product.findMany({
-        where: { name: { contains: trimmed, mode: 'insensitive' } },
-        include: { inventory: true },
-        take: 3,
-      });
-      if (products.length === 1) {
-        const p = products[0];
-        const qty = p.inventory?.quantity ?? 0;
-        const status = qty === 0 ? 'Out of Stock' : qty <= (p.inventory?.lowStockThreshold ?? 10) ? 'Low Stock' : 'In Stock';
-        return `${p.name} – ${qty} units available. Status: ${status}. Price: ${CASHIER_CURRENCY}${p.unitPrice.toFixed(2)}.`;
-      }
-      if (products.length > 1) {
-        return products.map((p) => `${p.name} – ${p.inventory?.quantity ?? 0} units. ${CASHIER_CURRENCY}${p.unitPrice.toFixed(2)}.`).join('\n');
-      }
+      const products = await searchProductsByName(trimmed, 3);
+      if (products.length > 0) return products.map((p) => formatProductDetails(p, CASHIER_CURRENCY)).join('\n\n');
+      const similar = await getSimilarProductsForChat(trimmed, 3);
+      if (similar.length > 0) return `Product not found. You might mean: ${similar.join(', ')}.`;
     }
     return 'I can help with: check stock, get price, and quick guidance. Try "Check stock for [product]" or "Price of [product]".';
   }
@@ -181,29 +270,33 @@ export async function chat(userId: number, message: string, role: string): Promi
     }
 
     if (custIntent === 'product_price' && productQuery) {
-      const products = await prisma.product.findMany({
-        where: { name: { contains: productQuery, mode: 'insensitive' } },
-        take: 5,
-      });
-      if (products.length === 0) return `No product found for "${productQuery}". Try browsing our Products page.`;
-      return products.map((p) => `${p.name} – ${CUSTOMER_CURRENCY}${p.unitPrice.toFixed(2)}`).join('\n');
+      const products = await searchProductsByName(productQuery, 5);
+      if (products.length === 0) {
+        const similar = await getSimilarProductsForChat(productQuery, 5);
+        const hint = similar.length > 0 ? ` You might be interested in: ${similar.join(', ')}.` : '';
+        return `No product found for "${productQuery}". Try browsing our Products page.${hint}`;
+      }
+      return products.map((p) => formatProductDetails(p, CUSTOMER_CURRENCY)).join('\n\n');
     }
 
     if (custIntent === 'product_stock' && productQuery) {
-      const products = await prisma.product.findMany({
-        where: { name: { contains: productQuery, mode: 'insensitive' } },
-        include: { inventory: true },
-        take: 5,
-      });
-      if (products.length === 0) return `No product found for "${productQuery}". Try browsing our Products page.`;
-      const line = products
-        .map((p) => {
-          const qty = p.inventory?.quantity ?? 0;
-          const status = qty === 0 ? 'Out of stock' : qty <= (p.inventory?.lowStockThreshold ?? 10) ? 'Low stock' : 'In stock';
-          return `${p.name} – ${status} (${qty} available). ${CUSTOMER_CURRENCY}${p.unitPrice.toFixed(2)}`;
-        })
-        .join('\n');
-      return line;
+      const products = await searchProductsByName(productQuery, 5);
+      if (products.length === 0) {
+        const similar = await getSimilarProductsForChat(productQuery, 5);
+        const hint = similar.length > 0 ? ` You might be interested in: ${similar.join(', ')}.` : '';
+        return `No product found for "${productQuery}". Try browsing our Products page.${hint}`;
+      }
+      return products.map((p) => formatProductDetails(p, CUSTOMER_CURRENCY)).join('\n\n');
+    }
+
+    if (custIntent === 'product_specs' && productQuery) {
+      const products = await searchProductsByName(productQuery, 3);
+      if (products.length === 0) {
+        const similar = await getSimilarProductsForChat(productQuery, 5);
+        const hint = similar.length > 0 ? ` You might be interested in: ${similar.join(', ')}.` : '';
+        return `No product found for "${productQuery}".${hint}`;
+      }
+      return products.map((p) => formatProductDetails(p, CUSTOMER_CURRENCY)).join('\n\n');
     }
 
     if (custIntent === 'shipping_info') {
@@ -215,11 +308,17 @@ export async function chat(userId: number, message: string, role: string): Promi
     }
 
     if (custIntent === 'customer_help') {
-      return 'I can help with: order status, product price and availability, shipping and payment info. You can also request to connect to a cashier for personal assistance. Try: "Where is my order?", "Price of Hammer", "Connect to cashier".';
+      return 'I read from the store database and can answer: order status, product price and availability, specs and details, shipping and payment. You can also type a product name (e.g. "nails", "cement") for instant info. Say "Connect to cashier" to chat with our staff. Try: "Where is my order?", "Price of Hammer", "Do you have lumber?", "Connect to cashier".';
     }
 
     if (custIntent === 'unknown') {
-      return 'I can help with: order status, product price and availability, shipping and payment. Say "Connect to cashier" to get help from our staff. Try: "Where is my order?", "Price of Common Nails", "Shipping info".';
+      // Last resort: try treating the whole message as a product search
+      const query = message.trim();
+      const products = await searchProductsByName(query, 5);
+      if (products.length > 0) return products.map((p) => formatProductDetails(p, CUSTOMER_CURRENCY)).join('\n\n');
+      const similar = await getSimilarProductsForChat(query, 5);
+      const hint = similar.length > 0 ? ` You might be interested in: ${similar.join(', ')}.` : '';
+      return `I can help with: order status, product price and availability, shipping and payment — all from our live database. Type a product name or try "Where is my order?", "Price of [product]", "Shipping info". Say "Connect to cashier" to talk to staff.${hint}`;
     }
 
     return 'I can help with order status, product info, shipping, and payment. Say "Connect to cashier" to speak with our staff.';

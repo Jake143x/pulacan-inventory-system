@@ -14,7 +14,21 @@ export async function api<T>(
     ...(options.headers as Record<string, string>),
   };
   if (token) (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const isNetworkError =
+      message === 'Failed to fetch' ||
+      message === 'Load failed' ||
+      message.includes('NetworkError') ||
+      (e instanceof TypeError && message.toLowerCase().includes('fetch'));
+    const msg = isNetworkError
+      ? `Cannot reach the server. Make sure the backend is running (e.g. \`npm run dev\` in the backend folder) and reachable at ${API_URL}.`
+      : message;
+    throw new Error(msg);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || res.statusText || 'Request failed');
   return data as T;
@@ -71,15 +85,21 @@ export const products = {
   },
   get: (id: number) => api<Product>(`/products/${id}`),
   categories: () => api<{ data: string[] }>('/products/categories'),
-  create: (body: { name: string; sku?: string; category?: string; description?: string; specifications?: string; unitPrice: number; imageUrl?: string; status?: 'active' | 'inactive'; initialQuantity?: number; lowStockThreshold?: number; reorderLevel?: number; reorderQuantity?: number }) =>
+  create: (body: { name: string; sku?: string; category?: string; description?: string; specifications?: string; unitPrice: number; imageUrl?: string; status?: 'active' | 'inactive'; unitType?: 'piece' | 'kg' | 'meter'; initialQuantity?: number; lowStockThreshold?: number; reorderLevel?: number; reorderQuantity?: number; saleUnit?: string; allowCustomQuantity?: boolean; minOrderQuantity?: number; quantityStep?: number }) =>
     api<Product>('/products', { method: 'POST', body: JSON.stringify(body) }),
-  update: (id: number, body: Partial<{ name: string; sku: string; category: string; description: string; specifications: string | null; unitPrice: number; imageUrl: string | null; status: 'active' | 'inactive' }>) =>
+  update: (id: number, body: Partial<{ name: string; sku: string; category: string; description: string; specifications: string | null; unitPrice: number; imageUrl: string | null; status: 'active' | 'inactive'; unitType: 'piece' | 'kg' | 'meter'; saleUnit: string | null; allowCustomQuantity: boolean; minOrderQuantity: number | null; quantityStep: number | null }>) =>
     api<Product>(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: (id: number) => api<void>(`/products/${id}`, { method: 'DELETE' }),
   bulkDelete: (productIds: number[]) =>
     api<{ deleted: number }>('/products/bulk-delete', { method: 'POST', body: JSON.stringify({ productIds }) }),
   bulkUpdateCategory: (productIds: number[], category: string) =>
     api<{ updated: number }>('/products/bulk-category', { method: 'PATCH', body: JSON.stringify({ productIds, category }) }),
+  addUnit: (productId: number, body: { unitName: string; price: number; stock?: number }) =>
+    api<{ unit: ProductUnit; product: Product }>(`/products/${productId}/units`, { method: 'POST', body: JSON.stringify(body) }),
+  updateUnit: (productId: number, unitId: number, body: { unitName?: string; price?: number; stock?: number }) =>
+    api<Product>(`/products/${productId}/units/${unitId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteUnit: (productId: number, unitId: number) =>
+    api<void>(`/products/${productId}/units/${unitId}`, { method: 'DELETE' }),
 };
 
 export type InventoryStatus = 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
@@ -138,8 +158,49 @@ export const inventory = {
     api<{ results: Array<{ productId: number; success: boolean; quantity?: number; error?: string }> }>('/inventory/bulk-adjust', { method: 'POST', body: JSON.stringify({ items }) }),
 };
 
+export interface InventoryAiAlertRow {
+  id: number;
+  productId: number;
+  productName: string;
+  currentStock: number;
+  predictedDemand: number;
+  suggestedReorder: number;
+  supplierId: number | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  product?: { id: number; name: string; unitType: string };
+  supplier?: { id: number; name: string; email: string | null } | null;
+}
+
+export const inventoryAi = {
+  alerts: () => api<{ data: InventoryAiAlertRow[] }>('/inventory-ai/alerts'),
+  analytics: () =>
+    api<{
+      productsAtRisk: number;
+      totalPredictedUsage: number;
+      totalSuggestedReorder: number;
+      alerts: Array<{
+        id: number;
+        productName: string;
+        currentStock: number;
+        predictedDemand: number;
+        suggestedReorder: number;
+        unitType: string;
+        supplierName: string | null;
+      }>;
+    }>('/inventory-ai/analytics'),
+  run: () => api<{ ok: boolean; alertsCreated: number; alertsUpdated: number }>('/inventory-ai/run', { method: 'POST' }),
+  generatePo: (alertId: number) =>
+    api<{
+      purchaseOrder: { id: number; supplierId: number; productId: number; quantity: number; status: string; createdAt: string; supplier: { id: number; name: string; email: string | null }; product: Product };
+      emailTemplate: { subject: string; body: string };
+    }>(`/inventory-ai/alerts/${alertId}/generate-po`, { method: 'POST' }),
+  suppliers: () => api<{ data: Array<{ id: number; name: string; email: string | null; contact: string | null }> }>('/inventory-ai/suppliers'),
+};
+
 export const pos = {
-  createTransaction: (items: Array<{ productId: number; quantity: number }>) =>
+  createTransaction: (items: Array<{ productId: number; quantity: number; unitName?: string }>) =>
     api<SaleTransaction>('/pos/transaction', { method: 'POST', body: JSON.stringify({ items }) }),
   /** Recent sales for Current sale chart dropdown. */
   recentTransactions: (params?: { limit?: number }) => {
@@ -206,6 +267,16 @@ export const reports = {
     if (params?.startDate) sp.set('startDate', params.startDate);
     if (params?.endDate) sp.set('endDate', params.endDate);
     return api<{ data: Array<{ date: string; revenue: number }> }>(`/reports/revenue-trends?${sp}`);
+  },
+  /** Sales chart: single day = hourly (hour, revenue, orders); multiple days = daily (date, revenue, orders). For dashboard dual-line chart. */
+  salesChart: (params: { startDate: string; endDate: string }) => {
+    const sp = new URLSearchParams();
+    sp.set('startDate', params.startDate);
+    sp.set('endDate', params.endDate);
+    return api<{
+      data: Array<{ hour?: string; date?: string; revenue: number; orders: number }>;
+      mode: 'hourly' | 'daily';
+    }>(`/reports/sales-chart?${sp}`);
   },
   dailyUnits: (params?: { startDate?: string; endDate?: string }) => {
     const sp = new URLSearchParams();
@@ -291,7 +362,13 @@ export type BusinessReport = {
 };
 
 export const ai = {
-  runPredict: () => api<{ message: string; data: unknown[] }>('/ai/predict', { method: 'POST' }),
+  runPredict: (days?: number) => {
+    const body = days != null ? { days } : undefined;
+    return api<{ message: string; data: unknown[] }>('/ai/predict', { method: 'POST', body: body ? JSON.stringify(body) : undefined });
+  },
+  /** Run forecast for N days; returns predictions with product name, predicted demand, current stock, reorder recommendation. */
+  forecast: (days: number) =>
+    api<{ data: AiForecastRow[]; forecastRangeDays: number }>(`/ai/forecast?days=${Math.max(1, Math.min(365, Math.round(days) || 7))}`),
   predictions: () => api<{ data: AiPrediction[] }>('/ai/predictions'),
   businessReport: (params?: { startDate?: string; endDate?: string }) => {
     const sp = new URLSearchParams();
@@ -302,6 +379,65 @@ export const ai = {
   },
   chat: (message: string) => api<{ reply: string }>('/ai/chat', { method: 'POST', body: JSON.stringify({ message }) }),
 };
+
+export const chat = {
+  listSessions: (params?: { status?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set('status', params.status);
+    const q = sp.toString();
+    return api<{ data: ChatSession[] }>(`/chat/sessions${q ? `?${q}` : ''}`);
+  },
+  /** Staff: list customers to start a live inquiry. */
+  listCustomers: () =>
+    api<{ data: Array<{ id: number; fullName: string; email: string }> }>('/chat/customers'),
+  /** Staff: start a live inquiry with a customer (creates or reuses open session). */
+  createSessionForCustomer: (customerId: number) =>
+    api<ChatSession>('/chat/sessions', { method: 'POST', body: JSON.stringify({ customerId }) }),
+  getSession: (id: number) => api<ChatSessionWithMessages>(`/chat/sessions/${id}`),
+  sendMessage: (sessionId: number, message: string, senderType: 'customer' | 'cashier', imageUrl?: string | null) =>
+    api<ChatMessage>(`/chat/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message: message || '', senderType, ...(imageUrl ? { imageUrl } : {}) }),
+    }),
+  /** Upload an image for live chat. Returns { url }. */
+  uploadImage: async (sessionId: number, file: File): Promise<{ url: string }> => {
+    const token = getToken();
+    const base = (import.meta.env.VITE_API_URL || '/api').replace(/\/api\/?$/, '') || '';
+    const form = new FormData();
+    form.append('image', file);
+    form.append('sessionId', String(sessionId));
+    const headers: HeadersInit = {};
+    if (token) (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${base}/api/upload/chat`, { method: 'POST', body: form, headers });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText || 'Upload failed');
+    return data as { url: string };
+  },
+  closeSession: (id: number) =>
+    api<ChatSession>(`/chat/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'closed' }) }),
+};
+
+export interface ChatSession {
+  id: number;
+  customerId: number;
+  status: string;
+  createdAt: string;
+  customer?: { id: number; fullName: string; email: string };
+  messages?: ChatMessage[];
+}
+
+export interface ChatMessage {
+  id: number;
+  sessionId: number;
+  senderType: string;
+  message: string;
+  imageUrl?: string | null;
+  createdAt: string;
+}
+
+export interface ChatSessionWithMessages extends ChatSession {
+  messages: ChatMessage[];
+}
 
 export const config = {
   get: () => api<Record<string, string>>('/config'),
@@ -368,7 +504,21 @@ export interface Product {
   unitPrice: number;
   imageUrl?: string | null;
   status?: string;
+  unitType?: 'piece' | 'kg' | 'meter';
+  saleUnit?: string | null;
+  allowCustomQuantity?: boolean;
+  minOrderQuantity?: number | null;
+  quantityStep?: number | null;
   inventory?: InventoryItem;
+  productUnits?: ProductUnit[];
+}
+
+export interface ProductUnit {
+  id: number;
+  productId: number;
+  unitName: string;
+  price: number;
+  stock: number;
 }
 
 export interface InventoryItem {
@@ -410,6 +560,11 @@ export interface AiPrediction {
   suggestedRestock: number;
   riskOfStockout: string | null;
   generatedAt: string;
+}
+
+/** Forecast result row: includes product and current stock (product.inventory) for display. */
+export interface AiForecastRow extends AiPrediction {
+  product: Product & { inventory?: { quantity: number } | null };
 }
 
 export interface Notification {

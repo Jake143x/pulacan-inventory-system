@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import CashierChatbot from '../components/CashierChatbot';
+import { chat } from '../api/client';
 
 const BoxIcon = () => (
   <svg className="w-6 h-6 shrink-0 text-[#2563EB]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -58,6 +59,12 @@ const BellIcon = () => (
   </svg>
 );
 
+const ChatIcon = () => (
+  <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+  </svg>
+);
+
 const navByRole: Record<string, Array<{ to: string; label: string; icon?: React.ReactNode }>> = {
   ADMIN: [
     { to: '/dashboard', label: 'Dashboard', icon: <ChartIcon /> },
@@ -81,6 +88,7 @@ const navByRole: Record<string, Array<{ to: string; label: string; icon?: React.
     { to: '/dashboard', label: 'Dashboard', icon: <ChartIcon /> },
     { to: '/pos', label: 'Current sale chart', icon: <CartIcon /> },
     { to: '/orders/approval', label: 'Approve Order', icon: <ApproveIcon /> },
+    { to: '/live-chat', label: 'Live chat', icon: <ChatIcon /> },
   ],
 };
 
@@ -97,6 +105,7 @@ const routeTitles: Record<string, string> = {
   '/notifications': 'Notifications',
   '/pos': 'Current sale chart',
   '/orders/approval': 'Approve orders',
+  '/live-chat': 'Live chat',
 };
 
 function getPageTitle(pathname: string): string {
@@ -107,16 +116,42 @@ function getPageTitle(pathname: string): string {
   return 'Pulacan Inventory';
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const m = window.matchMedia('(max-width: 767px)');
+    const fn = () => setIsMobile(m.matches);
+    m.addEventListener('change', fn);
+    return () => m.removeEventListener('change', fn);
+  }, []);
+  return isMobile;
+}
+
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openChatCount, setOpenChatCount] = useState(0);
+  const isMobile = useIsMobile();
+  const showFullSidebar = !sidebarCollapsed || isMobile;
 
   const role = user?.role ?? 'ADMIN';
   const nav = navByRole[role] ?? navByRole.ADMIN;
   const pageTitle = getPageTitle(location.pathname);
   const roleLabel = role === 'ADMIN' || role === 'OWNER' ? 'Administrator' : 'Cashier';
+
+  // Badge on Live chat when there are open sessions (for cashier/staff)
+  useEffect(() => {
+    if (role !== 'CASHIER' && role !== 'ADMIN' && role !== 'OWNER') return;
+    const fetch = () => {
+      chat.listSessions({ status: 'open' }).then((r) => setOpenChatCount(r.data?.length ?? 0)).catch(() => setOpenChatCount(0));
+    };
+    fetch();
+    const t = setInterval(fetch, 10000);
+    return () => clearInterval(t);
+  }, [role]);
 
   const handleLogout = () => {
     logout();
@@ -125,10 +160,28 @@ export default function DashboardLayout() {
 
   return (
     <div className="h-screen flex overflow-hidden admin-canvas">
-      {/* Left sidebar — fixed height, does not scroll */}
+      {/* Mobile backdrop */}
+      <div
+        role="button"
+        tabIndex={-1}
+        className="fixed inset-0 z-40 bg-black/50 md:hidden"
+        style={{ visibility: mobileMenuOpen ? 'visible' : 'hidden', opacity: mobileMenuOpen ? 1 : 0 }}
+        onClick={() => setMobileMenuOpen(false)}
+        onKeyDown={(e) => e.key === 'Escape' && setMobileMenuOpen(false)}
+        aria-hidden="true"
+      />
+      {/* Sidebar: on mobile fixed overlay, on md+ static */}
       <aside
-        className="flex flex-col shrink-0 h-full border-r transition-[width] duration-200 sidebar-3d"
-        style={{ width: sidebarCollapsed ? 52 : 260, backgroundColor: 'var(--admin-sidebar)', borderColor: 'var(--admin-border)' }}
+        className={`
+          flex flex-col shrink-0 h-full border-r transition-[width,transform] duration-200 sidebar-3d z-50
+          fixed md:relative left-0 top-0
+          ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        `}
+        style={{
+          width: isMobile ? 260 : (sidebarCollapsed ? 52 : 260),
+          backgroundColor: 'var(--admin-sidebar)',
+          borderColor: 'var(--admin-border)',
+        }}
       >
         <div className="flex h-14 items-center justify-between px-3 border-b" style={{ borderColor: 'var(--admin-border)' }}>
           {!sidebarCollapsed && (
@@ -139,16 +192,26 @@ export default function DashboardLayout() {
               <span className="font-semibold text-sm truncate" style={{ color: 'var(--admin-text)' }}>Pulacan Inventory</span>
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed((c) => !c)}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors"
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <svg className={`w-4 h-4 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              className="hidden md:block p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors"
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <svg className={`w-4 h-4 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="md:hidden p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5"
+              aria-label="Close menu"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-3 px-2">
@@ -157,6 +220,7 @@ export default function DashboardLayout() {
               key={to}
               to={to}
               end={to !== '/orders' && to !== '/dashboard'}
+              onClick={() => setMobileMenuOpen(false)}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                   isActive
@@ -165,16 +229,24 @@ export default function DashboardLayout() {
                 } ${isActive ? 'border-l-4 border-[#2563EB] pl-2' : 'border-l-4 border-transparent'}`
               }
             >
-              {icon}
-              {!sidebarCollapsed && <span>{label}</span>}
+              <span className="relative inline-flex shrink-0">
+                {icon}
+                {to === '/live-chat' && openChatCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
+                    {openChatCount > 99 ? '99+' : openChatCount}
+                  </span>
+                )}
+              </span>
+              {showFullSidebar && <span>{label}</span>}
             </NavLink>
           ))}
         </nav>
 
-        {!sidebarCollapsed && (
+        {showFullSidebar && (
           <div className="p-3 border-t" style={{ borderColor: 'var(--admin-border)' }}>
             <Link
               to="/profile"
+              onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors hover:bg-white/5"
               style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
             >
@@ -189,11 +261,11 @@ export default function DashboardLayout() {
           </div>
         )}
 
-        {!sidebarCollapsed && (
+        {showFullSidebar && (
           <div className="p-2">
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
               className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
             >
               <LogoutIcon />
@@ -204,12 +276,22 @@ export default function DashboardLayout() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b px-6 backdrop-blur-sm" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(15, 23, 42, 0.92)' }}>
-          <h1 className="text-lg font-semibold truncate" style={{ color: 'var(--admin-text)' }}>{pageTitle}</h1>
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b px-4 sm:px-6 backdrop-blur-sm" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(15, 23, 42, 0.92)' }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden p-2 -ml-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5"
+              aria-label="Open menu"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
+            <h1 className="text-base sm:text-lg font-semibold truncate" style={{ color: 'var(--admin-text)' }}>{pageTitle}</h1>
+          </div>
         </header>
 
         <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" style={{ backgroundColor: 'var(--admin-bg)' }}>
-          <div className="max-w-7xl mx-auto px-6 py-6">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
             <Outlet />
           </div>
         </main>

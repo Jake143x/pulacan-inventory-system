@@ -45,6 +45,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshUser();
   }, [refreshUser]);
 
+  // When another tab logs in/out (same browser), sync this tab so we don't have stale role/state.
+  // This way admin on device A and cashier on device B can both use the app at the same time;
+  // in one browser, only one user is logged in and all tabs show that user.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'token') {
+        const newToken = e.newValue ?? null;
+        setToken(newToken);
+        if (!newToken) {
+          setUser(null);
+          return;
+        }
+        refreshUser();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [refreshUser]);
+
   const login = async (email: string, password: string): Promise<{ user: User | null; mustChangePassword?: boolean }> => {
     const data = await auth.login(email, password);
     localStorage.setItem('token', data.token);

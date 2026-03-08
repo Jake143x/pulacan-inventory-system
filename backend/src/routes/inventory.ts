@@ -134,7 +134,7 @@ router.get('/movements', async (req, res, next) => {
 
 router.patch(
   '/:productId',
-  body('quantity').optional().isInt({ min: 0 }),
+  body('quantity').optional().isFloat({ min: 0 }),
   body('lowStockThreshold').optional().isInt({ min: 0 }),
   body('reorderLevel').optional().isInt({ min: 0 }),
   body('reorderQuantity').optional().isInt({ min: 0 }),
@@ -193,7 +193,7 @@ router.post(
   '/bulk-adjust',
   body('items').isArray(),
   body('items.*.productId').isInt(),
-  body('items.*.quantityDelta').isInt(),
+  body('items.*.quantityDelta').isFloat(),
   body('items.*.notes').optional().trim().isString(),
   async (req: AuthRequest, res, next) => {
     try {

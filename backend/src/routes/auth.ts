@@ -8,6 +8,7 @@ import { prisma } from '../lib/prisma.js';
 
 const router = Router();
 
+// Login issues a new JWT; existing tokens are not invalidated. Admin and cashier (or any roles) can be logged in at the same time from different devices without conflict.
 router.post(
   '/login',
   body('email').isEmail().normalizeEmail(),
